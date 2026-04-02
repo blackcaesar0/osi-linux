@@ -32,7 +32,7 @@ xbps-install -y \
     bzip2-devel \
     readline-devel \
     sqlite-devel \
-    xz-devel \
+    liblzma-devel \
     ncurses-devel \
     tk-devel \
     libpcap-devel \
