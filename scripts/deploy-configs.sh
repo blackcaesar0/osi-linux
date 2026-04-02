@@ -5,6 +5,13 @@ set -euo pipefail
 
 BASE="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Resolve the actual desktop user — safe whether script is run as user or root
+DESKTOP_USER="${SUDO_USER:-$USER}"
+if [ "$DESKTOP_USER" = "root" ]; then
+    DESKTOP_USER=$(ls /home | grep -v lost+found | head -1)
+fi
+export DESKTOP_USER
+
 # ── Config directories ────────────────────────────────────────────────────────
 mkdir -p \
     ~/.config/awesome \
@@ -26,7 +33,7 @@ cp "$BASE/wallpaper/osi.png"                ~/wallpaper/
 
 # ── System configs (needs root) ───────────────────────────────────────────────
 # Deploy emptty config with the actual username substituted in
-sudo sed "s/__OSUSER__/$USER/g" "$BASE/config/emptty/conf" > /tmp/emptty.conf
+sudo sed "s/__OSUSER__/$DESKTOP_USER/g" "$BASE/config/emptty/conf" > /tmp/emptty.conf
 sudo mv /tmp/emptty.conf /etc/emptty/conf
 
 sudo cp -r "$BASE/config/runit/spice-vdagent"    /etc/sv/

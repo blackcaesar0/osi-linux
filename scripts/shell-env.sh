@@ -3,7 +3,7 @@
 # Deploys shell configs, editor settings, and workspace templates.
 set -euo pipefail
 
-BASE="$HOME/osi-setup"
+BASE="$(cd "$(dirname "$0")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 

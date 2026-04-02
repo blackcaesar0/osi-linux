@@ -50,12 +50,11 @@ pip install --quiet pipx
 pipx ensurepath
 
 # Ruby — for metasploit, evil-winrm, and similar tools
-echo "==> Installing Ruby 3.3.0..."
-# Use bundled libyaml to avoid needing system libyaml-devel at configure time
-RUBY_CONFIGURE_OPTS="--with-libyaml-source-dir=bundled" rbenv install -s 3.3.0
-rbenv global 3.3.0
+echo "==> Installing Ruby 3.2.4..."
+rbenv install -s 3.2.4
+rbenv global 3.2.4
 
 echo "==> Version managers ready."
 echo "    Python: $(python --version 2>&1)"
-echo "    Ruby:   $(ruby --version)"
-echo "    pipx:   $(pipx --version)"
+echo "    Ruby:   $(ruby --version 2>&1)"
+echo "    pipx:   $(pipx --version 2>&1)"

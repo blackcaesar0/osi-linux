@@ -36,7 +36,10 @@ EOF
 sysctl -p /etc/sysctl.d/99-osi.conf
 
 # ── sudoers ───────────────────────────────────────────────────────────────────
-DESKTOP_USER="${SUDO_USER:-osi}"
+DESKTOP_USER="${SUDO_USER:-${DESKTOP_USER:-}}"
+if [ -z "$DESKTOP_USER" ] || [ "$DESKTOP_USER" = "root" ]; then
+    DESKTOP_USER=$(ls /home | grep -v lost+found | head -1)
+fi
 step "Configuring passwordless sudo for $DESKTOP_USER (/etc/sudoers.d/99-osi-nopasswd)"
 echo "$DESKTOP_USER ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
 chmod 0440 /etc/sudoers.d/99-osi-nopasswd
@@ -58,8 +61,8 @@ cat > /etc/security/limits.d/99-osi.conf << 'EOF'
 # High open-file limits — needed by scanners, proxies, and fuzzing tools
 *    soft nofile  65535
 *    hard nofile  65535
-osi  soft nofile  1048576
-osi  hard nofile  1048576
+${DESKTOP_USER}  soft nofile  1048576
+${DESKTOP_USER}  hard nofile  1048576
 EOF
 
 # ── timezone ──────────────────────────────────────────────────────────────────

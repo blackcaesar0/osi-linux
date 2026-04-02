@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run as osi inside the guest.
-set -e
+set -euo pipefail
 
 ICON_DIR="$HOME/.icons/osi-icons"
 
@@ -10,7 +10,7 @@ cat > ~/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
 gtk-icon-theme-name=osi-icons
 gtk-theme-name=Adwaita-dark
-gtk-font-name=JetBrains Mono 10
+gtk-font-name=Hack 10
 EOF
 cp ~/.config/gtk-3.0/settings.ini ~/.config/gtk-4.0/settings.ini
 
