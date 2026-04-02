@@ -22,9 +22,9 @@ xbps-install -y \
     xsettingsd \
     ranger mousepad \
     zathura zathura-pdf-mupdf \
-    xterm xfce-icon-theme slock
+    xterm slock
 
 ln -sf /etc/sv/NetworkManager /var/service/
 ln -sf /etc/sv/ly /var/service/
 
-echo "Desktop packages installed."
+echo "==> Desktop packages installed."

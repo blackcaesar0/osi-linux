@@ -16,14 +16,15 @@ xbps-install -y \
     zip unzip p7zip \
     rsync
 
-# Build essentials — needed to compile any tool from source
+# Build essentials
+# Note: gcc in Void includes C++ support — no separate gcc-c++ package
 xbps-install -y \
-    gcc gcc-c++ make cmake \
+    gcc make cmake \
     autoconf automake libtool pkg-config \
     binutils glibc-devel linux-headers \
     git-lfs
 
-# Development headers — covers 95% of tool build requirements
+# Development headers
 xbps-install -y \
     openssl-devel \
     libffi-devel \
@@ -66,22 +67,23 @@ xbps-install -y \
 xbps-install -y \
     nmap masscan \
     tcpdump wireshark \
-    ncat socat \
+    socat \
     net-tools iproute2 \
     bind-tools whois traceroute
 
 # Binary analysis, debugging, monitoring
+# Note: xxd ships inside the vim package — no vim-common in Void
+# Note: ncat is included in the nmap package
 xbps-install -y \
     strace ltrace gdb \
     lsof htop iotop pciutils usbutils sysstat \
-    openssl vim-common \
     openntpd
 
 # Enable system services
 ln -sf /etc/sv/dbus  /var/service/
 ln -sf /etc/sv/sshd  /var/service/
 
-# Allow all non-root users in the wheel group to use tshark without root
+# Add wheel group members to wireshark group for tshark without root
 getent group wheel | cut -d: -f4 | tr ',' '\n' | while read -r u; do
     [ -n "$u" ] && usermod -aG wireshark "$u" 2>/dev/null || true
 done
