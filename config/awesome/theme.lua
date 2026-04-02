@@ -1,7 +1,7 @@
 local theme = {}
 local home   = os.getenv("HOME")
 
-theme.font          = "JetBrains Mono 10"
+theme.font          = "Hack 10"
 theme.bg_normal     = "#000000"
 theme.bg_focus      = "#000000"
 theme.bg_urgent     = "#000000"

@@ -5,9 +5,9 @@ opacity = 0.95
 dynamic_title = true
 
 [font]
-normal  = { family = "JetBrains Mono", style = "Regular" }
-bold    = { family = "JetBrains Mono", style = "Bold" }
-italic  = { family = "JetBrains Mono", style = "Italic" }
+normal  = { family = "Hack", style = "Regular" }
+bold    = { family = "Hack", style = "Bold" }
+italic  = { family = "Hack", style = "Italic" }
 size    = 11.0
 
 [colors.primary]
