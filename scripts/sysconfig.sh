@@ -35,10 +35,9 @@ EOF
 sysctl -p /etc/sysctl.d/99-osi.conf
 
 # ── sudoers ───────────────────────────────────────────────────────────────────
-step "Configuring passwordless sudo for osi (/etc/sudoers.d/99-osi-nopasswd)"
-cat > /etc/sudoers.d/99-osi-nopasswd << 'EOF'
-osi ALL=(ALL:ALL) NOPASSWD: ALL
-EOF
+DESKTOP_USER="${SUDO_USER:-osi}"
+step "Configuring passwordless sudo for $DESKTOP_USER (/etc/sudoers.d/99-osi-nopasswd)"
+echo "$DESKTOP_USER ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
 chmod 0440 /etc/sudoers.d/99-osi-nopasswd
 
 # ── openntpd runit service ────────────────────────────────────────────────────

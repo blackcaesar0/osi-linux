@@ -98,14 +98,15 @@ See [docs/install.md](docs/install.md) for the full step-by-step walkthrough.
 
 `bootstrap.sh` reads these environment variables (all have defaults):
 
+`bootstrap.sh` prompts for username and passwords interactively. The following can also be set via environment variables:
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DISK_IMAGE` | `~/VM/osi-linux.qcow2` | Path for the qcow2 disk image |
 | `DISK_SIZE` | `80G` | Disk image size |
-| `VM_HOSTNAME` | `osi-linux` | Guest hostname |
-| `VM_USER` | `osi` | Non-root user created inside the VM |
+| `VM_HOSTNAME` | `osi` | Guest hostname |
 
-Example: `sudo DISK_SIZE=120G VM_HOSTNAME=pentest-1 bash scripts/bootstrap.sh`
+Example: `sudo DISK_SIZE=120G bash scripts/bootstrap.sh`
 
 ---
 

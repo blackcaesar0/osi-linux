@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run as root on the HOST to bootstrap Void Linux into the qcow2 disk.
+# Run as root on the HOST to bootstrap Void Linux into a qcow2 disk.
 # Usage: sudo bash scripts/bootstrap.sh
 set -euo pipefail
 
@@ -9,28 +9,28 @@ REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
 # ── CONFIGURATION — override via environment variables ────────────────────────
 DISK_SIZE="${DISK_SIZE:-80G}"
-VM_HOSTNAME="${VM_HOSTNAME:-osi-linux}"
-VM_USER="${VM_USER:-osi}"
-
+VM_HOSTNAME="${VM_HOSTNAME:-osi}"
 DISK="${DISK_IMAGE:-$REAL_HOME/VM/osi-linux.qcow2}"
+DISK_RAW="${DISK%.qcow2}.raw"
 MNT="/mnt/voidroot"
-NBD="/dev/nbd0"
 REPO="https://repo-default.voidlinux.org/current"
 XBPS_DIR="$REAL_HOME/VM/bootstrap"
 XBPS_STATIC="$XBPS_DIR/usr/bin/xbps-install.static"
 
 step() { echo; echo "==> $*"; }
 
+# ── Cleanup trap ──────────────────────────────────────────────────────────────
+LOOP=""
 cleanup() {
     echo "==> Cleaning up..."
-    umount -R "$MNT" 2>/dev/null || true
-    qemu-nbd --disconnect "$NBD" 2>/dev/null || true
-    rmmod nbd 2>/dev/null || true
+    umount -R "$MNT"     2>/dev/null || true
+    [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null || true
+    rm -f "$DISK_RAW"
 }
 trap cleanup EXIT
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
-for cmd in qemu-img qemu-nbd sgdisk mkfs.fat mkfs.ext4 curl blkid udevadm; do
+for cmd in qemu-img losetup parted mkfs.fat mkfs.ext4 curl blkid udevadm; do
     command -v "$cmd" &>/dev/null || { echo "ERROR: $cmd not found. Install it first."; exit 1; }
 done
 
@@ -39,15 +39,34 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# ── Passwords up front (interactive, before any automation) ───────────────────
-step "Set passwords before we begin"
+# ── Detect host keyboard layout ───────────────────────────────────────────────
+detect_keymap() {
+    local km
+    km=$(localectl status 2>/dev/null | awk '/X11 Layout/{print $3}')
+    [ -n "$km" ] && { echo "$km"; return; }
+    km=$(grep -i '^KEYMAP=' /etc/vconsole.conf 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$km" ] && { echo "$km"; return; }
+    km=$(grep '^XKBLAYOUT=' /etc/default/keyboard 2>/dev/null | cut -d= -f2 | tr -d '"')
+    [ -n "$km" ] && { echo "$km"; return; }
+    echo "us"
+}
+DETECTED_KEYMAP=$(detect_keymap)
+
+# ── Collect user input up front ───────────────────────────────────────────────
+step "Configure the new system"
+echo -n "Username: "; read -r VM_USER
+[ -n "$VM_USER" ] || { echo "Username cannot be empty."; exit 1; }
+
+echo -n "Keyboard layout [$DETECTED_KEYMAP]: "; read -r KM_INPUT
+VM_KEYMAP="${KM_INPUT:-$DETECTED_KEYMAP}"
+
 echo -n "Root password: "; read -rs ROOT_PASS; echo
 echo -n "Confirm root password: "; read -rs ROOT_PASS2; echo
 [ "$ROOT_PASS" = "$ROOT_PASS2" ] || { echo "Passwords do not match."; exit 1; }
 
-echo -n "Password for user '$VM_USER': "; read -rs OSI_PASS; echo
-echo -n "Confirm $VM_USER password: "; read -rs OSI_PASS2; echo
-[ "$OSI_PASS" = "$OSI_PASS2" ] || { echo "Passwords do not match."; exit 1; }
+echo -n "Password for '$VM_USER': "; read -rs VM_PASS; echo
+echo -n "Confirm password: "; read -rs VM_PASS2; echo
+[ "$VM_PASS" = "$VM_PASS2" ] || { echo "Passwords do not match."; exit 1; }
 
 # ── Step 1: static xbps ───────────────────────────────────────────────────────
 step "Downloading static xbps binary"
@@ -58,42 +77,39 @@ if [ ! -f "$XBPS_STATIC" ]; then
 fi
 echo "OK: $XBPS_STATIC"
 
-# ── Step 2: create disk ───────────────────────────────────────────────────────
-step "Creating qcow2 disk"
+# ── Step 2: create raw disk ───────────────────────────────────────────────────
+step "Creating raw disk image ($DISK_SIZE)"
 mkdir -p "$REAL_HOME/VM"
-if [ ! -f "$DISK" ]; then
-    qemu-img create -f qcow2 "$DISK" "$DISK_SIZE"
-    chown "$REAL_USER:$REAL_USER" "$DISK"
-else
-    echo "Disk already exists, skipping."
-fi
+rm -f "$DISK_RAW"
+qemu-img create -f raw "$DISK_RAW" "$DISK_SIZE"
 
-# ── Step 3: NBD ───────────────────────────────────────────────────────────────
-step "Connecting disk via NBD"
-modprobe nbd max_part=8
-qemu-nbd --connect="$NBD" "$DISK"
+# ── Step 3: loop device ───────────────────────────────────────────────────────
+step "Attaching loop device"
+LOOP=$(losetup --find --show --partscan "$DISK_RAW")
 udevadm settle
-lsblk "$NBD"
+echo "Loop device: $LOOP"
+lsblk "$LOOP"
 
 # ── Step 4: partition ─────────────────────────────────────────────────────────
 step "Partitioning disk (GPT: 512M EFI + rest root)"
-sgdisk -Z "$NBD"
-sgdisk -n 1:0:+512M -t 1:ef00 -c 1:"EFI"  "$NBD"
-sgdisk -n 2:0:0     -t 2:8300 -c 2:"root" "$NBD"
-partprobe "$NBD"
+parted -s "$LOOP" mklabel gpt
+parted -s "$LOOP" mkpart EFI  fat32 1MiB 513MiB
+parted -s "$LOOP" set 1 esp on
+parted -s "$LOOP" mkpart root ext4  513MiB 100%
 udevadm settle
+lsblk "$LOOP"
 
 # ── Step 5: format ────────────────────────────────────────────────────────────
 step "Formatting partitions"
-mkfs.fat -F32 -n EFI     "${NBD}p1"
-mkfs.ext4 -L voidroot -F "${NBD}p2"
+mkfs.fat -F32 -n EFI     "${LOOP}p1"
+mkfs.ext4 -L voidroot -F "${LOOP}p2"
 
 # ── Step 6: mount ─────────────────────────────────────────────────────────────
 step "Mounting"
 mkdir -p "$MNT"
-mount "${NBD}p2" "$MNT"
+mount "${LOOP}p2" "$MNT"
 mkdir -p "$MNT/boot/efi"
-mount "${NBD}p1" "$MNT/boot/efi"
+mount "${LOOP}p1" "$MNT/boot/efi"
 
 # ── Step 7: bootstrap ─────────────────────────────────────────────────────────
 step "Bootstrapping Void Linux base system (this will take a few minutes)"
@@ -109,8 +125,8 @@ cp /etc/resolv.conf "$MNT/etc/"
 # ── Step 9: configure inside chroot ──────────────────────────────────────────
 step "Configuring system inside chroot"
 
-UUID_ROOT=$(blkid -s UUID -o value "${NBD}p2")
-UUID_EFI=$(blkid  -s UUID -o value "${NBD}p1")
+UUID_ROOT=$(blkid -s UUID -o value "${LOOP}p2")
+UUID_EFI=$(blkid  -s UUID -o value "${LOOP}p1")
 
 chroot "$MNT" /bin/bash << CHROOT
 set -euo pipefail
@@ -125,11 +141,21 @@ echo "LANG=en_US.UTF-8" > /etc/locale.conf
 echo "en_US.UTF-8 UTF-8" >> /etc/default/libc-locales
 xbps-reconfigure -f glibc-locales
 
-cat > /etc/rc.conf << 'RC'
+cat > /etc/rc.conf << RC
 TIMEZONE="UTC"
-KEYMAP="us"
+KEYMAP="$VM_KEYMAP"
 HARDWARECLOCK="UTC"
 RC
+
+# X11 keyboard layout — matches the console keymap
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/00-keyboard.conf << KBEOF
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    Option "XkbLayout" "$VM_KEYMAP"
+EndSection
+KBEOF
 
 cat > /etc/fstab << FSTAB
 UUID=$UUID_ROOT /         ext4  defaults             0 1
@@ -137,19 +163,45 @@ UUID=$UUID_EFI  /boot/efi vfat  defaults             0 2
 tmpfs           /tmp      tmpfs defaults,nosuid,nodev 0 0
 FSTAB
 
-xbps-install -y sudo
+xbps-install -y sudo 2>/dev/null || true
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
 chmod 440 /etc/sudoers.d/wheel
 
-useradd -m -G wheel,audio,video,usb,cdrom,input,network -s /bin/bash "$VM_USER"
+useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash "$VM_USER"
 
-echo "root:$ROOT_PASS"      | chpasswd
-echo "$VM_USER:$OSI_PASS"   | chpasswd
+# Pre-fill the login screen with the created username
+mkdir -p /etc/ly
+echo "$VM_USER" > /etc/ly/save
 
 xbps-install -y grub-x86_64-efi efibootmgr
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OSI --recheck
+
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
+sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
+
+grub-install \
+    --target=x86_64-efi \
+    --efi-directory=/boot/efi \
+    --bootloader-id=OSI \
+    --no-nvram \
+    --removable \
+    --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
 CHROOT
 
-# cleanup trap handles unmount/disconnect
+# Set passwords outside the heredoc — avoids shell interpretation of special
+# characters like $, \, ` that would corrupt passwords set inside a heredoc
+rm -f "$MNT/etc/passwd.lock" "$MNT/etc/shadow.lock" "$MNT/etc/gshadow.lock"
+ROOT_HASH=$(openssl passwd -6 "$ROOT_PASS")
+VM_HASH=$(openssl passwd -6 "$VM_PASS")
+chroot "$MNT" usermod -p "$ROOT_HASH" root        || { echo "ERROR: failed to set root password";     exit 1; }
+chroot "$MNT" usermod -p "$VM_HASH"   "$VM_USER"  || { echo "ERROR: failed to set $VM_USER password"; exit 1; }
+
+# ── Step 10: convert to qcow2 ────────────────────────────────────────────────
+step "Converting raw image to qcow2"
+losetup -d "$LOOP"
+LOOP=""
+qemu-img convert -f raw -O qcow2 "$DISK_RAW" "$DISK"
+rm -f "$DISK_RAW"
+chown "$REAL_USER:$REAL_USER" "$DISK"
+
 step "Bootstrap complete. Boot with: ./launch-vm.sh"

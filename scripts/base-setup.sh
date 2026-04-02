@@ -81,7 +81,9 @@ xbps-install -y \
 ln -sf /etc/sv/dbus  /var/service/
 ln -sf /etc/sv/sshd  /var/service/
 
-# Allow the default user to use tshark without root
-usermod -aG wireshark osi 2>/dev/null || true
+# Allow all non-root users in the wheel group to use tshark without root
+getent group wheel | cut -d: -f4 | tr ',' '\n' | while read -r u; do
+    [ -n "$u" ] && usermod -aG wireshark "$u" 2>/dev/null || true
+done
 
 echo "==> Base setup complete."
