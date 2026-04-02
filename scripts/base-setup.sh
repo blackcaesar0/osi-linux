@@ -9,7 +9,7 @@ xbps-install -y \
     curl wget git vim nano \
     bash-completion man-pages \
     openssh dbus dbus-x11 \
-    spice-vdagent qemu-guest-agent \
+    spice-vdagent \
     xdg-utils xdg-user-dirs \
     tmux screen \
     jq yq \
