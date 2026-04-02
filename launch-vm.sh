@@ -1,6 +1,16 @@
 #!/bin/bash
 DISK="$HOME/VM/osi-linux.qcow2"
+PIDFILE="/tmp/osi-vm.pid"
 ISO="${1:-}"
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "VM already running (PID $OLD_PID). Kill it first: kill $OLD_PID"
+        exit 1
+    fi
+    rm -f "$PIDFILE"
+fi
 
 DRIVE_ARGS="-drive file=$DISK,if=none,id=disk0,format=qcow2 -device virtio-scsi-pci,id=scsi0 -device scsi-hd,drive=disk0,bus=scsi0.0"
 
@@ -37,4 +47,4 @@ qemu-system-x86_64 \
     -chardev spicevmc,name=usbredir,id=usbredir1 \
     -device usb-redir,chardev=usbredir1,id=redirect1,bus=ehci0.0 \
     -daemonize \
-    -pidfile /tmp/osi-vm.pid
+    -pidfile "$PIDFILE"

@@ -1,0 +1,85 @@
+* {
+    bg:          #000000;
+    bg-alt:      #0f0f0f;
+    fg:          #e0e0e0;
+    fg-dim:      #666666;
+    accent:      #ffffff;
+    selected-bg: #1a1a1a;
+    selected-fg: #ffffff;
+
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+window {
+    background-color: @bg;
+    border:           2px solid;
+    border-color:     @accent;
+    border-radius:    0;
+    padding:          0;
+    width:            480px;
+}
+
+mainbox {
+    background-color: @bg;
+    padding:          0;
+}
+
+inputbar {
+    background-color: @bg;
+    border:           0 0 1px 0;
+    border-color:     @accent;
+    padding:          10px 12px;
+    children:         [ prompt, entry ];
+}
+
+prompt {
+    background-color: @bg;
+    text-color:       @accent;
+    padding:          0 8px 0 0;
+}
+
+entry {
+    background-color:  @bg;
+    text-color:        @fg;
+    cursor:            text;
+    placeholder:       "search...";
+    placeholder-color: @fg-dim;
+}
+
+listview {
+    background-color: @bg;
+    padding:          4px 0;
+    spacing:          0;
+    lines:            12;
+}
+
+element {
+    background-color: @bg;
+    text-color:       @fg;
+    padding:          7px 12px;
+    spacing:          8px;
+    border:           0 0 0 2px;
+    border-color:     transparent;
+}
+
+element selected {
+    background-color: @selected-bg;
+    text-color:       @selected-fg;
+    border-color:     @accent;
+}
+
+element-icon {
+    size: 20px;
+}
+
+element-text {
+    vertical-align: 0.5;
+}
+
+message {
+    background-color: @bg;
+    border:           1px 0 0;
+    border-color:     @accent;
+    padding:          6px 12px;
+}
