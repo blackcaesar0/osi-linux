@@ -24,8 +24,15 @@ LOOP=""
 cleanup() {
     echo "==> Cleaning up..."
     sync
-    umount -R "$MNT"     2>/dev/null || true
-    [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null || true
+    umount -R "$MNT" 2>/dev/null || true
+    if [ -n "$LOOP" ]; then
+        if ! losetup -d "$LOOP" 2>/dev/null; then
+            echo "WARNING: Could not detach loop device $LOOP — mounts may still be active."
+            echo "         Run manually: sudo umount -R $MNT && sudo losetup -d $LOOP"
+            echo "         Keeping $DISK_RAW to prevent data loss."
+            return
+        fi
+    fi
     rm -f "$DISK_RAW"
 }
 trap cleanup EXIT
@@ -173,7 +180,14 @@ useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash "$VM_USER"
 xbps-install -y grub-x86_64-efi efibootmgr
 
 # Ensure dracut generates an initramfs for the installed kernel
-xbps-reconfigure -f linux*
+# Note: linux* glob cannot be used here — this heredoc is unquoted so the glob
+# would expand against the HOST filesystem, not the chroot. Query xbps instead.
+KPKG=\$(xbps-query -l 2>/dev/null | awk '/^ii/{print \$2}' | grep '^linux[0-9]' | grep -v 'headers\|firmware' | head -1)
+if [ -z "\$KPKG" ]; then
+    echo "ERROR: No kernel package found inside chroot — initramfs will not be generated"
+    exit 1
+fi
+xbps-reconfigure -f "\$KPKG"
 
 CHROOT
 

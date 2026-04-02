@@ -17,6 +17,27 @@ export DESKTOP_USER
 
 step() { echo; echo "==> $*"; }
 
+# ── Preflight: verify all config files exist ──────────────────────────────────
+step "Verifying config files"
+MISSING_FILES=()
+for f in \
+    "$BASE/config/awesome/rc.lua" \
+    "$BASE/config/awesome/theme.lua" \
+    "$BASE/config/alacritty/alacritty.toml" \
+    "$BASE/config/rofi/osi.rasi" \
+    "$BASE/config/picom/picom.conf" \
+    "$BASE/config/tmux/tmux.conf" \
+    "$BASE/config/shell/bash_aliases" \
+    "$BASE/config/vim/vimrc" \
+    "$BASE/wallpaper/osi.png"; do
+    [ -f "$f" ] || MISSING_FILES+=("$f")
+done
+if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+    echo "ERROR: Missing config files (repo may be incomplete or partially cloned):"
+    for f in "${MISSING_FILES[@]}"; do echo "  $f"; done
+    exit 1
+fi
+
 # ── Config directories ────────────────────────────────────────────────────────
 step "Creating config directories"
 mkdir -p \
