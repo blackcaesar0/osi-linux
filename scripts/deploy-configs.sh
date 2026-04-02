@@ -3,7 +3,7 @@
 # Deploys all configs and prepares the environment for tool installation.
 set -euo pipefail
 
-BASE="$HOME/osi-setup"
+BASE="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Config directories ────────────────────────────────────────────────────────
 mkdir -p \

@@ -7,6 +7,7 @@ step() { echo; echo "==> $*"; }
 
 # ── sysctl ────────────────────────────────────────────────────────────────────
 step "Writing sysctl tuning (/etc/sysctl.d/99-osi.conf)"
+mkdir -p /etc/sysctl.d
 cat > /etc/sysctl.d/99-osi.conf << 'EOF'
 # Large socket buffers — helps scanners and packet capture under load
 net.core.rmem_max        = 134217728

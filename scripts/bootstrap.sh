@@ -178,15 +178,46 @@ xbps-install -y grub-x86_64-efi efibootmgr
 sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
 sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
 
-grub-install \
-    --target=x86_64-efi \
-    --efi-directory=/boot/efi \
-    --bootloader-id=OSI \
-    --no-nvram \
-    --removable \
-    --recheck
-grub-mkconfig -o /boot/grub/grub.cfg
 CHROOT
+
+# Build a standalone BOOTX64.EFI with the grub config embedded inside the binary.
+# grub-install inside a loop-device chroot embeds wrong device paths.
+# grub-mkstandalone on the host produces a single self-contained EFI binary
+# that needs no external grub.cfg file — most reliable approach.
+command -v grub-mkstandalone &>/dev/null \
+    || { echo "ERROR: grub-mkstandalone not found on host. Install grub2/grub-efi."; exit 1; }
+
+KVER=$(ls "$MNT/boot/" | grep '^vmlinuz-' | sort -V | tail -1 | sed 's/vmlinuz-//')
+[ -z "$KVER" ] && { echo "ERROR: no kernel found in $MNT/boot/"; exit 1; }
+[ -f "$MNT/boot/initramfs-${KVER}.img" ] || echo "WARNING: no initramfs for $KVER — dracut may have failed"
+
+cat > /tmp/grub-embed.cfg << GCFG
+insmod part_gpt
+insmod ext2
+insmod search_fs_uuid
+insmod linux
+
+search --no-floppy --fs-uuid --set=root ${UUID_ROOT}
+
+set timeout=5
+set default=0
+
+menuentry "OSI Linux" {
+    linux /boot/vmlinuz-${KVER} root=UUID=${UUID_ROOT} ro quiet
+    initrd /boot/initramfs-${KVER}.img
+}
+GCFG
+
+mkdir -p "$MNT/boot/efi/EFI/BOOT"
+grub-mkstandalone \
+    --format=x86_64-efi \
+    --output="$MNT/boot/efi/EFI/BOOT/BOOTX64.EFI" \
+    "boot/grub/grub.cfg=/tmp/grub-embed.cfg"
+
+rm -f /tmp/grub-embed.cfg
+echo "    Kernel  : $KVER"
+echo "    UUID    : $UUID_ROOT"
+echo "    BOOTX64.EFI: $(ls -lh "$MNT/boot/efi/EFI/BOOT/BOOTX64.EFI")"
 
 # Set passwords outside the heredoc — avoids shell interpretation of special
 # characters like $, \, ` that would corrupt passwords set inside a heredoc
