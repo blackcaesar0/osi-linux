@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run as osi inside the guest.
+# Run as the desktop user inside the guest.
 set -euo pipefail
 
 ICON_DIR="$HOME/.icons/osi-icons"
@@ -51,17 +51,21 @@ MaxSize=512
 Type=Scalable
 EOF
 
-for SIZE in 16 32 48 64 128; do
-    convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
-        "$ICON_DIR/${SIZE}x${SIZE}/apps/Alacritty.png"
-    convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
-        "$ICON_DIR/${SIZE}x${SIZE}/apps/burpsuite.png"
-    convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
-        "$ICON_DIR/${SIZE}x${SIZE}/apps/metasploit.png"
-    convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
-        "$ICON_DIR/${SIZE}x${SIZE}/apps/firefox.png"
-done
-cp ~/wallpaper/osi.png "$ICON_DIR/scalable/apps/Alacritty.png"
+if command -v convert &>/dev/null && [ -f ~/wallpaper/osi.png ]; then
+    for SIZE in 16 32 48 64 128; do
+        convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
+            "$ICON_DIR/${SIZE}x${SIZE}/apps/Alacritty.png"
+        convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
+            "$ICON_DIR/${SIZE}x${SIZE}/apps/burpsuite.png"
+        convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
+            "$ICON_DIR/${SIZE}x${SIZE}/apps/metasploit.png"
+        convert ~/wallpaper/osi.png -resize "${SIZE}x${SIZE}" \
+            "$ICON_DIR/${SIZE}x${SIZE}/apps/firefox.png"
+    done
+    cp ~/wallpaper/osi.png "$ICON_DIR/scalable/apps/Alacritty.png"
+else
+    echo "    WARNING: ImageMagick (convert) or osi.png not found — skipping icon generation"
+fi
 
 gtk-update-icon-cache -f "$ICON_DIR" 2>/dev/null || true
 gtk-update-icon-cache -f /usr/share/icons/Papirus-Dark 2>/dev/null || true

@@ -19,21 +19,22 @@ Mod key is Super (Win key).
 | `Mod+d` | Open app launcher (rofi) |
 | `Mod+e` | Open file manager (ranger in alacritty) |
 | `Mod+r` | Run prompt in status bar |
-| `Print` | Screenshot → ~/screenshots/ |
+| `Print` | Screenshot (full screen) → ~/screenshots/ |
+| `Shift+Print` | Screenshot (select region, flameshot) |
 
 ## awesome WM — Workspaces
 
 | Binding | Action |
 |---------|--------|
-| `Mod+1` | Switch to workspace `term` |
-| `Mod+2` | Switch to workspace `web` |
-| `Mod+3` | Switch to workspace `tools` |
-| `Mod+4` | Switch to workspace `recon` |
-| `Mod+5` | Switch to workspace `exploit` |
-| `Mod+6` | Switch to workspace `post` |
-| `Mod+7` | Switch to workspace `files` |
-| `Mod+8` | Switch to workspace `misc` |
-| `Mod+9` | Switch to workspace `scratch` |
+| `Mod+1` | Switch to workspace `OSI` |
+| `Mod+2` | Switch to workspace `term` |
+| `Mod+3` | Switch to workspace `web` |
+| `Mod+4` | Switch to workspace `tools` |
+| `Mod+5` | Switch to workspace `recon` |
+| `Mod+6` | Switch to workspace `exploit` |
+| `Mod+7` | Switch to workspace `post` |
+| `Mod+8` | Switch to workspace `files` |
+| `Mod+9` | Switch to workspace `misc` |
 | `Mod+Left` | Previous workspace |
 | `Mod+Right` | Next workspace |
 | `Mod+Escape` | Last visited workspace |

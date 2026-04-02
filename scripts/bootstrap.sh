@@ -23,6 +23,7 @@ step() { echo; echo "==> $*"; }
 LOOP=""
 cleanup() {
     echo "==> Cleaning up..."
+    sync
     umount -R "$MNT"     2>/dev/null || true
     [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null || true
     rm -f "$DISK_RAW"
@@ -30,7 +31,7 @@ cleanup() {
 trap cleanup EXIT
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
-for cmd in qemu-img losetup parted mkfs.fat mkfs.ext4 curl blkid udevadm; do
+for cmd in qemu-img losetup parted mkfs.fat mkfs.ext4 curl blkid udevadm grub-mkstandalone; do
     command -v "$cmd" &>/dev/null || { echo "ERROR: $cmd not found. Install it first."; exit 1; }
 done
 
@@ -113,7 +114,7 @@ mount "${LOOP}p1" "$MNT/boot/efi"
 
 # ── Step 7: bootstrap ─────────────────────────────────────────────────────────
 step "Bootstrapping Void Linux base system (this will take a few minutes)"
-XBPS_ARCH=x86_64 "$XBPS_STATIC" -S -r "$MNT" -R "$REPO" base-system
+XBPS_ARCH=x86_64 "$XBPS_STATIC" -S -r "$MNT" -R "$REPO" -y base-system
 
 # ── Step 8: bind mounts ───────────────────────────────────────────────────────
 step "Binding host filesystems for chroot"
@@ -169,14 +170,10 @@ chmod 440 /etc/sudoers.d/wheel
 
 useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash "$VM_USER"
 
-# Pre-fill the login screen with the created username
-mkdir -p /etc/ly
-echo "$VM_USER" > /etc/ly/save
-
 xbps-install -y grub-x86_64-efi efibootmgr
 
-sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
-sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
+# Ensure dracut generates an initramfs for the installed kernel
+xbps-reconfigure -f linux*
 
 CHROOT
 
@@ -184,12 +181,14 @@ CHROOT
 # grub-install inside a loop-device chroot embeds wrong device paths.
 # grub-mkstandalone on the host produces a single self-contained EFI binary
 # that needs no external grub.cfg file — most reliable approach.
-command -v grub-mkstandalone &>/dev/null \
-    || { echo "ERROR: grub-mkstandalone not found on host. Install grub2/grub-efi."; exit 1; }
-
 KVER=$(ls "$MNT/boot/" | grep '^vmlinuz-' | sort -V | tail -1 | sed 's/vmlinuz-//')
 [ -z "$KVER" ] && { echo "ERROR: no kernel found in $MNT/boot/"; exit 1; }
-[ -f "$MNT/boot/initramfs-${KVER}.img" ] || echo "WARNING: no initramfs for $KVER — dracut may have failed"
+
+if [ ! -f "$MNT/boot/initramfs-${KVER}.img" ]; then
+    echo "WARNING: no initramfs for $KVER — trying to regenerate..."
+    chroot "$MNT" dracut --force /boot/initramfs-${KVER}.img "$KVER" 2>/dev/null || true
+fi
+[ -f "$MNT/boot/initramfs-${KVER}.img" ] || { echo "ERROR: initramfs generation failed for $KVER"; exit 1; }
 
 cat > /tmp/grub-embed.cfg << GCFG
 insmod part_gpt
@@ -229,6 +228,8 @@ chroot "$MNT" usermod -p "$VM_HASH"   "$VM_USER"  || { echo "ERROR: failed to se
 
 # ── Step 10: convert to qcow2 ────────────────────────────────────────────────
 step "Converting raw image to qcow2"
+sync
+umount -R "$MNT"
 losetup -d "$LOOP"
 LOOP=""
 qemu-img convert -f raw -O qcow2 "$DISK_RAW" "$DISK"
