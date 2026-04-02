@@ -51,7 +51,8 @@ pipx ensurepath
 
 # Ruby — for metasploit, evil-winrm, and similar tools
 echo "==> Installing Ruby 3.3.0..."
-rbenv install -s 3.3.0
+# Use bundled libyaml to avoid needing system libyaml-devel at configure time
+RUBY_CONFIGURE_OPTS="--with-libyaml-source-dir=bundled" rbenv install -s 3.3.0
 rbenv global 3.3.0
 
 echo "==> Version managers ready."
