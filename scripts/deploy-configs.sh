@@ -41,32 +41,7 @@ exec dbus-launch --exit-with-session awesome
 EOF
 chmod +x ~/.xinitrc
 
-# osi-update maintenance script
-cat > ~/bin/osi-update << 'EOF'
-#!/bin/bash
-set -e
-echo "[*] Updating system packages..."
-sudo xbps-install -Su
-
-echo "[*] Updating pyenv..."
-git -C ~/.pyenv pull
-
-echo "[*] Updating rbenv..."
-git -C ~/.rbenv pull
-git -C ~/.rbenv/plugins/ruby-build pull
-
-echo "[*] Updating Responder..."
-git -C ~/tools/Responder pull
-
-echo "[*] Updating BloodHound..."
-git -C ~/tools/BloodHound pull
-
-echo "[*] Updating nuclei templates..."
-nuclei -update-templates
-
-echo "[*] Done."
-EOF
-chmod +x ~/bin/osi-update
-grep -q '$HOME/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"' >> ~/.bashrc
+grep -q '.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"' >> ~/.bashrc
+mkdir -p ~/tools
 
 echo "Configs deployed. Run: awesome -k ~/.config/awesome/rc.lua to verify."
