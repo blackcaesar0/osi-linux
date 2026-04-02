@@ -43,9 +43,12 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
 
 # Python versions — 3.12 as global default, keep older ones for tool compat
+# Override with: PYTHON_VERSIONS="3.11.9 3.12.3" bash scripts/version-managers.sh
+PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.9.19 3.10.14 3.11.9 3.12.3}"
+PYTHON_GLOBAL="${PYTHON_GLOBAL:-3.12.3}"
 step "Installing Python versions (this takes several minutes per version)"
 FAILED_BUILDS=()
-for ver in 3.9.19 3.10.14 3.11.9 3.12.3; do
+for ver in $PYTHON_VERSIONS; do
     if pyenv versions --bare | grep -q "^${ver}$"; then
         echo "    Python $ver already installed"
     else
@@ -57,11 +60,11 @@ for ver in 3.9.19 3.10.14 3.11.9 3.12.3; do
     fi
 done
 
-if pyenv versions --bare | grep -q "^3.12.3$"; then
-    pyenv global 3.12.3
+if pyenv versions --bare | grep -q "^${PYTHON_GLOBAL}$"; then
+    pyenv global "$PYTHON_GLOBAL"
 elif pyenv versions --bare | grep -q .; then
     NEWEST=$(pyenv versions --bare | sort -V | tail -1)
-    echo "WARNING: 3.12.3 unavailable; using $NEWEST as global default"
+    echo "WARNING: $PYTHON_GLOBAL unavailable; using $NEWEST as global default"
     pyenv global "$NEWEST"
 else
     echo "ERROR: No Python versions were successfully installed."
