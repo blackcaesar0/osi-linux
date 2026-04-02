@@ -223,6 +223,8 @@ echo "    BOOTX64.EFI: $(ls -lh "$MNT/boot/efi/EFI/BOOT/BOOTX64.EFI")"
 rm -f "$MNT/etc/passwd.lock" "$MNT/etc/shadow.lock" "$MNT/etc/gshadow.lock"
 ROOT_HASH=$(openssl passwd -6 "$ROOT_PASS")
 VM_HASH=$(openssl passwd -6 "$VM_PASS")
+[ -n "$ROOT_HASH" ] || { echo "ERROR: openssl failed to generate root password hash"; exit 1; }
+[ -n "$VM_HASH" ]   || { echo "ERROR: openssl failed to generate $VM_USER password hash"; exit 1; }
 chroot "$MNT" usermod -p "$ROOT_HASH" root        || { echo "ERROR: failed to set root password";     exit 1; }
 chroot "$MNT" usermod -p "$VM_HASH"   "$VM_USER"  || { echo "ERROR: failed to set $VM_USER password"; exit 1; }
 

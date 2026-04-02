@@ -59,8 +59,18 @@ xbps-install -y firefox
 step "Enabling services"
 ln -sf /etc/sv/NetworkManager   /var/service/
 ln -sf /etc/sv/emptty           /var/service/
-ln -sf /etc/sv/spice-vdagent    /var/service/ 2>/dev/null || true
-ln -sf /etc/sv/qemu-guest-agent /var/service/ 2>/dev/null || true
+if [ -d /etc/sv/spice-vdagent ]; then
+    ln -sf /etc/sv/spice-vdagent /var/service/ \
+        || echo "WARNING: Failed to enable spice-vdagent — clipboard sharing won't work"
+else
+    echo "    NOTE: spice-vdagent not installed yet — run deploy-configs.sh to enable it"
+fi
+if [ -d /etc/sv/qemu-guest-agent ]; then
+    ln -sf /etc/sv/qemu-guest-agent /var/service/ \
+        || echo "WARNING: Failed to enable qemu-guest-agent — guest agent won't work"
+else
+    echo "    NOTE: qemu-guest-agent not installed yet — run deploy-configs.sh to enable it"
+fi
 
 echo ""
 echo "==> Desktop packages installed."

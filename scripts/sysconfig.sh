@@ -8,11 +8,17 @@ step() { echo; echo "==> $*"; }
 # ── Resolve the desktop user ─────────────────────────────────────────────────
 DESKTOP_USER="${SUDO_USER:-${DESKTOP_USER:-}}"
 if [ -z "$DESKTOP_USER" ] || [ "$DESKTOP_USER" = "root" ]; then
-    DESKTOP_USER=$(ls /home | grep -v lost+found | head -1)
+    DESKTOP_USER=$(getent passwd | awk -F: '$3 >= 1000 && $6 ~ /^\/home\// {print $1}' | grep -v nobody | head -1)
 fi
 
 if [ -z "$DESKTOP_USER" ]; then
     echo "ERROR: Could not determine desktop user."
+    echo "       Set DESKTOP_USER=<username> and re-run."
+    exit 1
+fi
+
+if ! id "$DESKTOP_USER" &>/dev/null; then
+    echo "ERROR: User '$DESKTOP_USER' does not exist."
     exit 1
 fi
 

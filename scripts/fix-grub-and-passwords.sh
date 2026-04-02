@@ -91,9 +91,25 @@ mount --rbind /dev  "$MNT/dev"  && mount --make-rslave "$MNT/dev"
 mount --rbind /proc "$MNT/proc" && mount --make-rslave "$MNT/proc"
 
 rm -f "$MNT/etc/passwd.lock" "$MNT/etc/shadow.lock" "$MNT/etc/gshadow.lock"
-VM_USER=$(ls "$MNT/home/" | head -1)
+
+_HOME_USERS=$(ls "$MNT/home/" | grep -v lost+found || true)
+_COUNT=$(echo "$_HOME_USERS" | grep -c . 2>/dev/null || true)
+if [ "$_COUNT" -eq 0 ]; then
+    echo "ERROR: No user home directories found in $MNT/home/"
+    exit 1
+elif [ "$_COUNT" -gt 1 ]; then
+    echo "Multiple users found: $_HOME_USERS"
+    echo -n "Which user to reset password for? "; read -r VM_USER
+else
+    VM_USER=$(echo "$_HOME_USERS" | head -1)
+fi
+[ -n "$VM_USER" ] || { echo "ERROR: No user selected."; exit 1; }
+echo "    User    : $VM_USER"
+
 ROOT_HASH=$(openssl passwd -6 "$ROOT_PASS")
 USER_HASH=$(openssl passwd -6 "$USER_PASS")
+[ -n "$ROOT_HASH" ] || { echo "ERROR: openssl failed to generate root password hash"; exit 1; }
+[ -n "$USER_HASH" ] || { echo "ERROR: openssl failed to generate $VM_USER password hash"; exit 1; }
 
 chroot "$MNT" usermod -p "$ROOT_HASH" root \
     && echo "    root: OK" \

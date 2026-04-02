@@ -49,7 +49,8 @@ fi
 # Per-VM EFI vars file — writable, persists boot entries between reboots
 if [ ! -f "$VARS" ]; then
     if [ -n "$OVMF_VARS_TEMPLATE" ]; then
-        cp "$OVMF_VARS_TEMPLATE" "$VARS"
+        cp "$OVMF_VARS_TEMPLATE" "$VARS" \
+            || { echo "ERROR: Failed to copy OVMF vars template to $VARS"; exit 1; }
     else
         VARS=""
     fi
