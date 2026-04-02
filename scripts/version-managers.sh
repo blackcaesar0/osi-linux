@@ -21,8 +21,10 @@ fi
 # ── pyenv ─────────────────────────────────────────────────────────────────────
 step "Setting up pyenv"
 if [ ! -d "$HOME/.pyenv" ]; then
-    git clone https://github.com/pyenv/pyenv.git ~/.pyenv
-    git clone https://github.com/pyenv/pyenv-virtualenv.git ~/.pyenv/plugins/pyenv-virtualenv
+    git clone https://github.com/pyenv/pyenv.git ~/.pyenv \
+        || { echo "ERROR: Failed to clone pyenv — check your network connection."; rm -rf ~/.pyenv; exit 1; }
+    git clone https://github.com/pyenv/pyenv-virtualenv.git ~/.pyenv/plugins/pyenv-virtualenv \
+        || { echo "ERROR: Failed to clone pyenv-virtualenv — check your network connection."; exit 1; }
 fi
 
 # Shell config — idempotent
@@ -42,15 +44,29 @@ eval "$(pyenv init -)"
 
 # Python versions — 3.12 as global default, keep older ones for tool compat
 step "Installing Python versions (this takes several minutes per version)"
+FAILED_BUILDS=()
 for ver in 3.9.19 3.10.14 3.11.9 3.12.3; do
     if pyenv versions --bare | grep -q "^${ver}$"; then
         echo "    Python $ver already installed"
     else
         echo "    Installing Python $ver..."
-        pyenv install -s "$ver" || echo "    WARNING: Python $ver failed to build, skipping"
+        if ! pyenv install -s "$ver"; then
+            echo "    WARNING: Python $ver failed to build, skipping"
+            FAILED_BUILDS+=("$ver")
+        fi
     fi
 done
-pyenv global 3.12.3
+
+if pyenv versions --bare | grep -q "^3.12.3$"; then
+    pyenv global 3.12.3
+elif pyenv versions --bare | grep -q .; then
+    NEWEST=$(pyenv versions --bare | sort -V | tail -1)
+    echo "WARNING: 3.12.3 unavailable; using $NEWEST as global default"
+    pyenv global "$NEWEST"
+else
+    echo "ERROR: No Python versions were successfully installed."
+    exit 1
+fi
 
 # pipx — install in user context
 step "Setting up pipx"

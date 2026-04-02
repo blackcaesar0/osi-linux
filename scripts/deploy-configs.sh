@@ -11,7 +11,8 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 BASE="$(cd "$(dirname "$0")/.." && pwd)"
-DESKTOP_USER="$USER"
+DESKTOP_USER="${USER:-}"
+[ -n "$DESKTOP_USER" ] || { echo "ERROR: \$USER is not set — cannot determine desktop user."; exit 1; }
 export DESKTOP_USER
 
 step() { echo; echo "==> $*"; }
