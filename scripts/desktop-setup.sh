@@ -17,7 +17,7 @@ xbps-install -y \
     xclip xdotool \
     noto-fonts-ttf noto-fonts-emoji \
     NetworkManager \
-    nm-applet \
+    network-manager-applet \
     firefox \
     xsettingsd
 

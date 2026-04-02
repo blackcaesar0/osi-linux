@@ -37,7 +37,7 @@ cat > ~/.xinitrc << 'EOF'
 export XDG_SESSION_TYPE=x11
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 mkdir -p "$XDG_RUNTIME_DIR"
-exec awesome
+exec dbus-launch --exit-with-session awesome
 EOF
 chmod +x ~/.xinitrc
 

@@ -4,7 +4,7 @@ set -e
 
 sudo xbps-install -y \
     make gcc zlib-devel bzip2-devel readline-devel sqlite-devel \
-    openssl-devel tk-devel libffi-devel xz-devel liblzma-devel \
+    openssl-devel tk-devel libffi-devel xz-devel \
     ncurses-devel patch curl git
 
 if [ ! -d "$HOME/.pyenv" ]; then

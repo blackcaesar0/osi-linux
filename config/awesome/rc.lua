@@ -223,6 +223,5 @@ client.connect_signal("unfocus", function(c) c.border_color = beautiful.border_n
 
 awful.spawn.with_shell("picom --config " .. os.getenv("HOME") .. "/.config/picom/picom.conf -b")
 awful.spawn.with_shell("feh --bg-fill " .. os.getenv("HOME") .. "/wallpaper/osi.png")
-awful.spawn.with_shell("spice-vdagent")
 awful.spawn.with_shell("nm-applet")
 awful.spawn.with_shell("mkdir -p ~/screenshots")

@@ -6,7 +6,7 @@ TOOLS="$HOME/tools"
 mkdir -p "$TOOLS"
 
 # Metasploit
-if [ ! -d "$HOME/.msf4" ]; then
+if ! command -v msfconsole &>/dev/null; then
     curl -fsSL https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb \
         > /tmp/msfinstall
     chmod +x /tmp/msfinstall
@@ -60,7 +60,7 @@ install_gh_release() {
 install_gh_release "projectdiscovery/nuclei"    "nuclei_VERSION_linux_amd64.zip"       "nuclei"
 install_gh_release "projectdiscovery/subfinder" "subfinder_VERSION_linux_amd64.zip"    "subfinder"
 install_gh_release "projectdiscovery/httpx"     "httpx_VERSION_linux_amd64.zip"        "httpx"
-install_gh_release "epi052/feroxbuster"         "x86_64-linux-feroxbuster.zip"         "feroxbuster"
+install_gh_release "epi052/feroxbuster"         "feroxbuster-VERSION-linux-amd64.zip"  "feroxbuster"
 install_gh_release "owasp-amass/amass"          "amass_linux_amd64.zip"                "amass"
 
 # ligolo-ng (proxy + agent)

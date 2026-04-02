@@ -1,39 +1,73 @@
 #!/bin/bash
 # Run as root on the HOST to bootstrap Void Linux into the qcow2 disk.
-# This replaces the live ISO installer entirely.
-set -e
+# Usage: sudo bash scripts/bootstrap.sh
+set -euo pipefail
 
-DISK="$HOME/VM/osi-linux.qcow2"
+# Resolve the invoking user's home directory even under sudo
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+DISK="$REAL_HOME/VM/osi-linux.qcow2"
 MNT="/mnt/voidroot"
 NBD="/dev/nbd0"
 REPO="https://repo-default.voidlinux.org/current"
-XBPS_STATIC="$HOME/VM/bootstrap/usr/bin/xbps-install.static"
+XBPS_DIR="$REAL_HOME/VM/bootstrap"
+XBPS_STATIC="$XBPS_DIR/usr/bin/xbps-install.static"
 
 step() { echo; echo "==> $*"; }
 
+cleanup() {
+    echo "==> Cleaning up..."
+    umount -R "$MNT" 2>/dev/null || true
+    qemu-nbd --disconnect "$NBD" 2>/dev/null || true
+    rmmod nbd 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# ── Preflight checks ──────────────────────────────────────────────────────────
+for cmd in qemu-img qemu-nbd sgdisk mkfs.fat mkfs.ext4 curl blkid udevadm; do
+    command -v "$cmd" &>/dev/null || { echo "ERROR: $cmd not found. Install it first."; exit 1; }
+done
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: Run as root: sudo bash scripts/bootstrap.sh"
+    exit 1
+fi
+
+# ── Passwords up front (interactive, before any automation) ───────────────────
+step "Set passwords before we begin"
+echo -n "Root password: "; read -rs ROOT_PASS; echo
+echo -n "Confirm root password: "; read -rs ROOT_PASS2; echo
+[ "$ROOT_PASS" = "$ROOT_PASS2" ] || { echo "Passwords do not match."; exit 1; }
+
+echo -n "Password for user 'osi': "; read -rs OSI_PASS; echo
+echo -n "Confirm osi password: "; read -rs OSI_PASS2; echo
+[ "$OSI_PASS" = "$OSI_PASS2" ] || { echo "Passwords do not match."; exit 1; }
+
 # ── Step 1: static xbps ───────────────────────────────────────────────────────
 step "Downloading static xbps binary"
-mkdir -p "$HOME/VM/bootstrap"
+mkdir -p "$XBPS_DIR"
 if [ ! -f "$XBPS_STATIC" ]; then
     curl -fsSL https://repo-default.voidlinux.org/static/xbps-static-latest.x86_64-musl.tar.xz \
-        | tar xJ -C "$HOME/VM/bootstrap"
+        | tar xJ -C "$XBPS_DIR"
 fi
 echo "OK: $XBPS_STATIC"
 
 # ── Step 2: create disk ───────────────────────────────────────────────────────
 step "Creating qcow2 disk"
-if [ -f "$DISK" ]; then
-    echo "Disk already exists, skipping creation."
-else
-    mkdir -p "$HOME/VM"
+mkdir -p "$REAL_HOME/VM"
+if [ ! -f "$DISK" ]; then
     qemu-img create -f qcow2 "$DISK" 80G
+    chown "$REAL_USER:$REAL_USER" "$DISK"
+else
+    echo "Disk already exists, skipping."
 fi
 
 # ── Step 3: NBD ───────────────────────────────────────────────────────────────
 step "Connecting disk via NBD"
 modprobe nbd max_part=8
 qemu-nbd --connect="$NBD" "$DISK"
-sleep 1
+udevadm settle
 lsblk "$NBD"
 
 # ── Step 4: partition ─────────────────────────────────────────────────────────
@@ -42,11 +76,11 @@ sgdisk -Z "$NBD"
 sgdisk -n 1:0:+512M -t 1:ef00 -c 1:"EFI"  "$NBD"
 sgdisk -n 2:0:0     -t 2:8300 -c 2:"root" "$NBD"
 partprobe "$NBD"
-sleep 1
+udevadm settle
 
 # ── Step 5: format ────────────────────────────────────────────────────────────
 step "Formatting partitions"
-mkfs.fat -F32 -n EFI    "${NBD}p1"
+mkfs.fat -F32 -n EFI     "${NBD}p1"
 mkfs.ext4 -L voidroot -F "${NBD}p2"
 
 # ── Step 6: mount ─────────────────────────────────────────────────────────────
@@ -74,7 +108,7 @@ UUID_ROOT=$(blkid -s UUID -o value "${NBD}p2")
 UUID_EFI=$(blkid  -s UUID -o value "${NBD}p1")
 
 chroot "$MNT" /bin/bash << CHROOT
-set -e
+set -euo pipefail
 
 chown root:root /
 chmod 755 /
@@ -104,21 +138,13 @@ chmod 440 /etc/sudoers.d/wheel
 
 useradd -m -G wheel,audio,video,usb,cdrom,input,network -s /bin/bash osi
 
+echo "root:$ROOT_PASS" | chpasswd
+echo "osi:$OSI_PASS"   | chpasswd
+
 xbps-install -y grub-x86_64-efi efibootmgr
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OSI --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
-
-echo "----"
-echo "Set root password:"
-passwd root
-echo "Set password for user 'osi':"
-passwd osi
 CHROOT
 
-# ── Step 10: unmount ──────────────────────────────────────────────────────────
-step "Unmounting and disconnecting"
-umount -R "$MNT"
-qemu-nbd --disconnect "$NBD"
-rmmod nbd 2>/dev/null || true
-
-step "Bootstrap complete. Boot the VM with: ./launch-vm.sh"
+# cleanup trap handles unmount/disconnect
+step "Bootstrap complete. Boot with: ./launch-vm.sh"
