@@ -11,17 +11,23 @@ sv status /var/service/*
 # Time sync active
 sv status /var/service/openntpd
 
+# SPICE agent running (clipboard + auto-resize)
+sv status /var/service/spice-vdagent
+
+# QEMU guest agent running
+sv status /var/service/qemu-guest-agent
+
 # Network up
 ip addr show
 
 # SSH accessible from host (run on host)
-ssh osi@localhost -p 2222
+ssh youruser@localhost -p 2222
 
 # Python version
 python --version    # should show 3.12.x
 pyenv versions      # shows all installed
 
-# Ruby version
+# Ruby version (system)
 ruby --version      # should show 3.3.x
 
 # Go
@@ -96,7 +102,7 @@ go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 
 Installed binaries land in `~/go/bin/` which is on PATH.
 
-### Ruby tools (via gem)
+### Ruby tools (via gem — uses system Ruby)
 
 ```sh
 # evil-winrm
@@ -158,5 +164,5 @@ git clone --depth 1 https://github.com/danielmiessler/SecLists .
 ```sh
 sudo xbps-install -Su         # update all packages
 pyenv update                  # update pyenv itself
-rbenv update 2>/dev/null || (cd ~/.rbenv && git pull)
+pip install --user --upgrade pipx  # update pipx
 ```

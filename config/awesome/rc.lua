@@ -6,6 +6,7 @@ local beautiful     = require("beautiful")
 local naughty       = require("naughty")
 local hotkeys_popup = require("awful.hotkeys_popup")
 
+-- Error handling
 if awesome.startup_errors then
     naughty.notify({
         preset = naughty.config.presets.critical,
@@ -23,11 +24,13 @@ do
     end)
 end
 
+-- Theme
 beautiful.init(gears.filesystem.get_configuration_dir() .. "theme.lua")
 
 local terminal = "alacritty"
 local modkey   = "Mod4"
 
+-- Layouts
 awful.layout.layouts = {
     awful.layout.suit.tile,
     awful.layout.suit.tile.left,
@@ -38,6 +41,17 @@ awful.layout.layouts = {
     awful.layout.suit.floating,
 }
 
+-- Wallpaper — set reliably for every screen
+local function set_wallpaper(s)
+    if beautiful.wallpaper then
+        local wallpaper = beautiful.wallpaper
+        if type(wallpaper) == "function" then wallpaper = wallpaper(s) end
+        gears.wallpaper.maximized(wallpaper, s, true)
+    end
+end
+screen.connect_signal("property::geometry", set_wallpaper)
+
+-- Taglist and tasklist mouse buttons
 local taglist_buttons = gears.table.join(
     awful.button({},         1, function(t) t:view_only() end),
     awful.button({ modkey }, 1, function(t) if client.focus then client.focus:move_to_tag(t) end end),
@@ -56,8 +70,11 @@ local tasklist_buttons = gears.table.join(
     awful.button({}, 5, function() awful.client.focus.byidx(-1) end)
 )
 
+-- Screen setup
 awful.screen.connect_for_each_screen(function(s)
-    awful.tag({ "term", "web", "tools", "recon", "exploit", "post", "files", "misc", "scratch" }, s, awful.layout.layouts[1])
+    set_wallpaper(s)
+
+    awful.tag({ "OSI", "term", "web", "tools", "recon", "exploit", "post", "files", "misc" }, s, awful.layout.layouts[1])
 
     s.mypromptbox = awful.widget.prompt()
     s.mylayoutbox = awful.widget.layoutbox(s)
@@ -95,10 +112,6 @@ awful.screen.connect_for_each_screen(function(s)
         layout = wibox.layout.align.horizontal,
         {
             layout = wibox.layout.fixed.horizontal,
-            wibox.widget {
-                markup = "  <b>OSI</b>  ",
-                widget = wibox.widget.textbox
-            },
             s.mytaglist,
             s.mypromptbox,
         },
@@ -112,10 +125,7 @@ awful.screen.connect_for_each_screen(function(s)
     }
 end)
 
-screen.connect_signal("property::geometry", function()
-    awful.spawn("feh --bg-fill " .. os.getenv("HOME") .. "/wallpaper/osi.png")
-end)
-
+-- Mouse bindings on desktop
 root.buttons(gears.table.join(
     awful.button({}, 3, function()
         awful.spawn("rofi -show drun -theme " .. os.getenv("HOME") .. "/.config/rofi/osi.rasi")
@@ -124,6 +134,7 @@ root.buttons(gears.table.join(
     awful.button({}, 5, awful.tag.viewprev)
 ))
 
+-- Global keybindings
 local globalkeys = gears.table.join(
     awful.key({ modkey },           "s",      hotkeys_popup.show_help,             { description = "show help",        group = "awesome" }),
     awful.key({ modkey },           "Left",   awful.tag.viewprev,                  { description = "previous tag",     group = "tag" }),
@@ -151,6 +162,9 @@ local globalkeys = gears.table.join(
     awful.key({},                   "Print",  function()
         awful.spawn("scrot -e 'mkdir -p ~/screenshots && mv $f ~/screenshots/'")
     end, { description = "screenshot", group = "launcher" }),
+    awful.key({ "Shift" },          "Print",  function()
+        awful.spawn("flameshot gui")
+    end, { description = "screenshot (select)", group = "launcher" }),
     awful.key({ modkey, "Control"}, "l",      function()
         awful.spawn("slock")
     end, { description = "lock screen", group = "awesome" }),
@@ -159,6 +173,7 @@ local globalkeys = gears.table.join(
     end, { description = "file manager", group = "launcher" })
 )
 
+-- Tag switching with number keys
 for i = 1, 9 do
     globalkeys = gears.table.join(globalkeys,
         awful.key({ modkey },           "#" .. i + 9, function()
@@ -178,6 +193,7 @@ for i = 1, 9 do
     )
 end
 
+-- Client keybindings
 local clientkeys = gears.table.join(
     awful.key({ modkey },           "f",     function(c) c.fullscreen = not c.fullscreen; c:raise() end, { description = "fullscreen",      group = "client" }),
     awful.key({ modkey, "Shift" },  "c",     function(c) c:kill() end,                                   { description = "close",           group = "client" }),
@@ -187,6 +203,7 @@ local clientkeys = gears.table.join(
     awful.key({ modkey },           "m",     function(c) c.maximized = not c.maximized; c:raise() end,   { description = "maximize",         group = "client" })
 )
 
+-- Client mouse buttons
 local clientbuttons = gears.table.join(
     awful.button({},         1, function(c) c:emit_signal("request::activate", "mouse_click", { raise = true }) end),
     awful.button({ modkey }, 1, function(c) c:emit_signal("request::activate", "mouse_click", { raise = true }); awful.mouse.client.move(c) end),
@@ -195,6 +212,7 @@ local clientbuttons = gears.table.join(
 
 root.keys(globalkeys)
 
+-- Rules
 awful.rules.rules = {
     { rule = {},
       properties = {
@@ -209,13 +227,15 @@ awful.rules.rules = {
           titlebars_enabled = false,
       }
     },
-    { rule = { class = "Alacritty" }, properties = { tag = "term"   } },
-    { rule = { class = "firefox"   }, properties = { tag = "web"    } },
+    { rule = { class = "Alacritty" }, properties = { tag = "term"    } },
+    { rule = { class = "firefox"   }, properties = { tag = "web"     } },
+    { rule = { class = "Firefox"   }, properties = { tag = "web"     } },
     { rule_any = { type = { "dialog" } },
       properties = { floating = true, placement = awful.placement.centered }
     },
 }
 
+-- Signals
 client.connect_signal("manage", function(c)
     if awesome.startup
         and not c.size_hints.user_position
@@ -227,7 +247,15 @@ end)
 client.connect_signal("focus",   function(c) c.border_color = beautiful.border_focus  end)
 client.connect_signal("unfocus", function(c) c.border_color = beautiful.border_normal end)
 
-awful.spawn.with_shell("picom --config " .. os.getenv("HOME") .. "/.config/picom/picom.conf -b")
-awful.spawn.with_shell("feh --bg-fill " .. os.getenv("HOME") .. "/wallpaper/osi.png")
-awful.spawn.with_shell("nm-applet")
-awful.spawn.with_shell("mkdir -p ~/screenshots")
+-- Autostart — only run once per session using pgrep guard
+local function run_once(cmd, name)
+    name = name or cmd:match("([^%s]+)")
+    awful.spawn.easy_async_with_shell(
+        "pgrep -x " .. name .. " > /dev/null || " .. cmd,
+        function() end
+    )
+end
+
+run_once("picom --config " .. os.getenv("HOME") .. "/.config/picom/picom.conf -b", "picom")
+run_once("nm-applet", "nm-applet")
+run_once("mkdir -p ~/screenshots")

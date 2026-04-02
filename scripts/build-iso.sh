@@ -35,7 +35,7 @@ trap cleanup EXIT
 # ── Preflight checks ──────────────────────────────────────────────────────────
 step "Checking prerequisites"
 MISSING=()
-for cmd in mksquashfs xorriso grub-mkrescue dracut curl; do
+for cmd in mksquashfs xorriso grub-mkrescue curl; do
     command -v "$cmd" &>/dev/null || MISSING+=("$cmd")
 done
 if [ "${#MISSING[@]}" -gt 0 ]; then
@@ -65,7 +65,7 @@ mkdir -p "$ROOTFS" "$ISO_STAGE"
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 step "Bootstrapping Void Linux base system (takes several minutes)"
-XBPS_ARCH=x86_64 "$XBPS_STATIC" -S -r "$ROOTFS" -R "$REPO" base-system
+XBPS_ARCH=x86_64 "$XBPS_STATIC" -S -r "$ROOTFS" -R "$REPO" -y base-system
 
 # ── Bind mounts ───────────────────────────────────────────────────────────────
 step "Binding host filesystems"
@@ -81,25 +81,45 @@ cp "$PROJECT_DIR/scripts/desktop-setup.sh" "$ROOTFS/tmp/"
 chroot "$ROOTFS" bash /tmp/base-setup.sh
 chroot "$ROOTFS" bash /tmp/desktop-setup.sh
 
-# ── Live boot initramfs ───────────────────────────────────────────────────────
-step "Installing dracut and building live initramfs"
-chroot "$ROOTFS" xbps-install -y dracut
+# ── Live user ─────────────────────────────────────────────────────────────────
+step "Creating live user"
+chroot "$ROOTFS" /bin/bash << 'LIVEUSER'
+set -euo pipefail
+if ! id osi &>/dev/null; then
+    useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash osi
+fi
+echo "osi:osi" | chpasswd
+echo "root:root" | chpasswd
+echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
+chmod 0440 /etc/sudoers.d/99-osi-nopasswd
+LIVEUSER
 
-# Locate the installed kernel version
+# ── Live boot initramfs ───────────────────────────────────────────────────────
+step "Building live initramfs"
+chroot "$ROOTFS" xbps-install -y dracut 2>/dev/null || true
+
 KVER=$(ls "$ROOTFS/lib/modules/" 2>/dev/null | sort -V | tail -1)
 if [ -z "$KVER" ]; then
-    echo "ERROR: No kernel found in rootfs. base-setup.sh must install linux or linux-lts."
+    echo "ERROR: No kernel found in rootfs."
     exit 1
 fi
 echo "    Kernel: $KVER"
 
-# dracut with dmsquash-live provides the live-boot overlay mechanism.
-# If this step fails on Void because the dmsquash-live module is absent,
-# see docs/build-iso.md for the manual fallback using void-mklive.
-chroot "$ROOTFS" dracut --force \
-    --add "dmsquash-live" \
-    --kver "$KVER" \
-    /boot/initramfs-live.img
+# Try dracut with dmsquash-live; fall back to basic initramfs if module is absent
+if chroot "$ROOTFS" dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
+    step "Building dracut initramfs with dmsquash-live module"
+    chroot "$ROOTFS" dracut --force \
+        --add "dmsquash-live" \
+        --kver "$KVER" \
+        /boot/initramfs-live.img
+else
+    echo "WARNING: dmsquash-live module not available in dracut."
+    echo "         Building standard initramfs. Consider using void-mklive instead."
+    echo "         See docs/build-iso.md for details."
+    chroot "$ROOTFS" dracut --force \
+        --kver "$KVER" \
+        /boot/initramfs-live.img
+fi
 
 # ── Locate kernel image ───────────────────────────────────────────────────────
 VMLINUZ=$(ls "$ROOTFS/boot/vmlinuz-"* 2>/dev/null | sort -V | tail -1)
@@ -160,7 +180,7 @@ chown "$REAL_USER:$REAL_USER" "$OUTPUT_ISO"
 echo ""
 echo "==> ISO ready: $OUTPUT_ISO"
 echo "    Size: $(du -sh "$OUTPUT_ISO" | cut -f1)"
-echo "    SHA256: $(sha256sum "$OUTPUT_ISO")"
+echo "    SHA256: $(sha256sum "$OUTPUT_ISO" | cut -d' ' -f1)"
 echo ""
 echo "    Test: qemu-system-x86_64 -cdrom $OUTPUT_ISO -m 4G -enable-kvm -boot d"
 echo "    USB:  sudo dd if=$OUTPUT_ISO of=/dev/sdX bs=4M status=progress oflag=sync"
