@@ -180,7 +180,14 @@ useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash "$VM_USER"
 xbps-install -y grub-x86_64-efi efibootmgr
 
 # Ensure dracut generates an initramfs for the installed kernel
-xbps-reconfigure -f linux*
+# Note: linux* glob cannot be used here — this heredoc is unquoted so the glob
+# would expand against the HOST filesystem, not the chroot. Query xbps instead.
+KPKG=\$(xbps-query -l 2>/dev/null | awk '/^ii/{print \$2}' | grep '^linux[0-9]' | grep -v 'headers\|firmware' | head -1)
+if [ -z "\$KPKG" ]; then
+    echo "ERROR: No kernel package found inside chroot — initramfs will not be generated"
+    exit 1
+fi
+xbps-reconfigure -f "\$KPKG"
 
 CHROOT
 
