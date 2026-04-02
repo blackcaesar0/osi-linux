@@ -57,7 +57,7 @@ local tasklist_buttons = gears.table.join(
 )
 
 awful.screen.connect_for_each_screen(function(s)
-    awful.tag({ "1", "2", "3", "4", "5", "6", "7", "8", "9" }, s, awful.layout.layouts[1])
+    awful.tag({ "term", "web", "tools", "recon", "exploit", "post", "files", "misc", "scratch" }, s, awful.layout.layouts[1])
 
     s.mypromptbox = awful.widget.prompt()
     s.mylayoutbox = awful.widget.layoutbox(s)
@@ -150,7 +150,13 @@ local globalkeys = gears.table.join(
     awful.key({ modkey, "Shift" },  "space",  function() awful.layout.inc(-1) end,  { description = "prev layout",     group = "layout" }),
     awful.key({},                   "Print",  function()
         awful.spawn("scrot -e 'mkdir -p ~/screenshots && mv $f ~/screenshots/'")
-    end, { description = "screenshot", group = "launcher" })
+    end, { description = "screenshot", group = "launcher" }),
+    awful.key({ modkey, "Control"}, "l",      function()
+        awful.spawn("slock")
+    end, { description = "lock screen", group = "awesome" }),
+    awful.key({ modkey },           "e",      function()
+        awful.spawn(terminal .. " -e ranger")
+    end, { description = "file manager", group = "launcher" })
 )
 
 for i = 1, 9 do
@@ -203,8 +209,8 @@ awful.rules.rules = {
           titlebars_enabled = false,
       }
     },
-    { rule = { class = "Alacritty" }, properties = { tag = "1" } },
-    { rule = { class = "firefox"   }, properties = { tag = "2" } },
+    { rule = { class = "Alacritty" }, properties = { tag = "term"   } },
+    { rule = { class = "firefox"   }, properties = { tag = "web"    } },
     { rule_any = { type = { "dialog" } },
       properties = { floating = true, placement = awful.placement.centered }
     },

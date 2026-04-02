@@ -11,6 +11,7 @@ mkdir -p \
     ~/.config/alacritty \
     ~/.config/rofi \
     ~/.config/picom \
+    ~/.config/tmux \
     ~/wallpaper \
     ~/.local/bin \
     ~/bin
@@ -32,6 +33,9 @@ sudo chmod +x /etc/sv/spice-vdagent/run /etc/sv/qemu-guest-agent/run
 sudo ln -sf /etc/sv/spice-vdagent    /var/service/ 2>/dev/null || true
 sudo ln -sf /etc/sv/qemu-guest-agent /var/service/ 2>/dev/null || true
 
+# ── System configuration (kernel params, sudoers, ntp, limits) ────────────────
+sudo bash "$BASE/scripts/sysconfig.sh"
+
 # ── .xinitrc ──────────────────────────────────────────────────────────────────
 cat > ~/.xinitrc << 'EOF'
 #!/bin/sh
@@ -49,6 +53,7 @@ grep -q '.local/bin' ~/.bashrc || \
 # ── Tools directory structure ─────────────────────────────────────────────────
 # Pre-create standard layout so any tool dropped in has a home
 mkdir -p ~/tools/{recon,exploitation,post-exploitation,web,network,forensics,custom,wordlists}
+cp "$BASE/config/tmux/tmux.conf" ~/.tmux.conf
 
 # Symlink Go workspace to a predictable location
 mkdir -p ~/go/{bin,pkg,src}
@@ -65,6 +70,9 @@ export PATH="$HOME/.local/bin:$HOME/bin:$GOPATH/bin:$PATH"
 
 # ── Version managers ──────────────────────────────────────────────────────────
 bash "$BASE/scripts/version-managers.sh"
+
+# ── Shell environment ─────────────────────────────────────────────────────────
+bash "$BASE/scripts/shell-env.sh"
 
 # ── Icon theme ────────────────────────────────────────────────────────────────
 bash "$BASE/scripts/setup-icons.sh"

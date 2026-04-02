@@ -1,0 +1,61 @@
+" OSI Linux vimrc — minimal, plugin-free
+
+set nocompatible
+syntax on
+filetype plugin indent on
+
+" Display
+set number
+set relativenumber
+set cursorline
+set showmatch
+set ruler
+set showcmd
+set wildmenu
+set scrolloff=5
+
+" Search
+set hlsearch
+set incsearch
+set ignorecase
+set smartcase
+
+" Indentation — 4 spaces, no tabs
+set expandtab
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
+set autoindent
+set smartindent
+
+" No swap or backup files
+set noswapfile
+set nobackup
+set nowritebackup
+
+" Splits open right and below
+set splitright
+set splitbelow
+
+" Status line (no plugins required)
+set laststatus=2
+set statusline=%f\ %m%r\ [%{&ff}]\ %y%=%l/%L\ col:%c
+
+" Misc
+set backspace=indent,eol,start
+set encoding=utf-8
+set hidden
+set ttyfast
+
+" Terminal color hints
+set background=dark
+highlight LineNr       ctermfg=240
+highlight CursorLineNr ctermfg=white
+highlight Comment      ctermfg=242
+highlight StatusLine   cterm=bold ctermfg=white ctermbg=234
+
+" Clear search highlight with Enter in normal mode
+nnoremap <CR> :nohlsearch<CR><CR>
+
+" Quick save with leader+w
+nnoremap <leader>w :w<CR>

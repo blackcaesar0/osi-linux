@@ -62,8 +62,26 @@ xbps-install -y \
     noto-fonts-ttf \
     noto-fonts-emoji
 
+# Pentest networking and scanning
+xbps-install -y \
+    nmap masscan \
+    tcpdump wireshark \
+    ncat socat \
+    net-tools iproute2 \
+    bind-tools whois traceroute
+
+# Binary analysis, debugging, monitoring
+xbps-install -y \
+    strace ltrace gdb \
+    lsof htop iotop pciutils usbutils sysstat \
+    openssl vim-common \
+    openntpd
+
 # Enable system services
 ln -sf /etc/sv/dbus  /var/service/
 ln -sf /etc/sv/sshd  /var/service/
+
+# Allow the default user to use tshark without root
+usermod -aG wireshark osi 2>/dev/null || true
 
 echo "==> Base setup complete."

@@ -7,7 +7,12 @@ set -euo pipefail
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
-DISK="$REAL_HOME/VM/osi-linux.qcow2"
+# ── CONFIGURATION — override via environment variables ────────────────────────
+DISK_SIZE="${DISK_SIZE:-80G}"
+VM_HOSTNAME="${VM_HOSTNAME:-osi-linux}"
+VM_USER="${VM_USER:-osi}"
+
+DISK="${DISK_IMAGE:-$REAL_HOME/VM/osi-linux.qcow2}"
 MNT="/mnt/voidroot"
 NBD="/dev/nbd0"
 REPO="https://repo-default.voidlinux.org/current"
@@ -40,8 +45,8 @@ echo -n "Root password: "; read -rs ROOT_PASS; echo
 echo -n "Confirm root password: "; read -rs ROOT_PASS2; echo
 [ "$ROOT_PASS" = "$ROOT_PASS2" ] || { echo "Passwords do not match."; exit 1; }
 
-echo -n "Password for user 'osi': "; read -rs OSI_PASS; echo
-echo -n "Confirm osi password: "; read -rs OSI_PASS2; echo
+echo -n "Password for user '$VM_USER': "; read -rs OSI_PASS; echo
+echo -n "Confirm $VM_USER password: "; read -rs OSI_PASS2; echo
 [ "$OSI_PASS" = "$OSI_PASS2" ] || { echo "Passwords do not match."; exit 1; }
 
 # ── Step 1: static xbps ───────────────────────────────────────────────────────
@@ -57,7 +62,7 @@ echo "OK: $XBPS_STATIC"
 step "Creating qcow2 disk"
 mkdir -p "$REAL_HOME/VM"
 if [ ! -f "$DISK" ]; then
-    qemu-img create -f qcow2 "$DISK" 80G
+    qemu-img create -f qcow2 "$DISK" "$DISK_SIZE"
     chown "$REAL_USER:$REAL_USER" "$DISK"
 else
     echo "Disk already exists, skipping."
@@ -114,7 +119,7 @@ chown root:root /
 chmod 755 /
 
 ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-echo "osi-linux" > /etc/hostname
+echo "$VM_HOSTNAME" > /etc/hostname
 
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 echo "en_US.UTF-8 UTF-8" >> /etc/default/libc-locales
@@ -136,10 +141,10 @@ xbps-install -y sudo
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/wheel
 chmod 440 /etc/sudoers.d/wheel
 
-useradd -m -G wheel,audio,video,usb,cdrom,input,network -s /bin/bash osi
+useradd -m -G wheel,audio,video,usb,cdrom,input,network -s /bin/bash "$VM_USER"
 
-echo "root:$ROOT_PASS" | chpasswd
-echo "osi:$OSI_PASS"   | chpasswd
+echo "root:$ROOT_PASS"      | chpasswd
+echo "$VM_USER:$OSI_PASS"   | chpasswd
 
 xbps-install -y grub-x86_64-efi efibootmgr
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OSI --recheck

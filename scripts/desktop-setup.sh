@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run as root inside the guest.
-set -e
+set -euo pipefail
 
 xbps-install -y \
     xorg-minimal xorg-input-drivers xf86-video-fbdev \
@@ -19,13 +19,12 @@ xbps-install -y \
     NetworkManager \
     network-manager-applet \
     firefox \
-    xsettingsd
+    xsettingsd \
+    ranger mousepad \
+    zathura zathura-pdf-mupdf \
+    xterm xfce-icon-theme slock
 
 ln -sf /etc/sv/NetworkManager /var/service/
 ln -sf /etc/sv/ly /var/service/
-
-mkdir -p /home/osi/wallpaper
-cp /home/osi/osi-setup/wallpaper/osi.png /home/osi/wallpaper/
-chown -R osi:osi /home/osi/wallpaper
 
 echo "Desktop packages installed."
