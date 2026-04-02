@@ -12,9 +12,9 @@ step "Deploying shell configs"
 cp "$BASE/config/shell/bash_aliases" ~/.bash_aliases
 cp "$BASE/config/vim/vimrc"          ~/.vimrc
 
-grep -q '\.bash_aliases' ~/.bashrc 2>/dev/null || cat >> ~/.bashrc << 'EOF'
+grep -q '# OSI: bash_aliases' ~/.bashrc 2>/dev/null || cat >> ~/.bashrc << 'EOF'
 
-# Aliases
+# OSI: bash_aliases
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
