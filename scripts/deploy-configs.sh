@@ -25,13 +25,13 @@ cp "$BASE/config/picom/picom.conf"          ~/.config/picom/
 cp "$BASE/wallpaper/osi.png"                ~/wallpaper/
 
 # ── System configs (needs root) ───────────────────────────────────────────────
-sudo cp "$BASE/config/ly/config.ini" /etc/ly/config.ini
+# Deploy emptty config with the actual username substituted in
+sudo sed "s/__OSUSER__/$USER/g" "$BASE/config/emptty/conf" > /tmp/emptty.conf
+sudo mv /tmp/emptty.conf /etc/emptty/conf
 
 sudo cp -r "$BASE/config/runit/spice-vdagent"    /etc/sv/
-sudo cp -r "$BASE/config/runit/qemu-guest-agent" /etc/sv/
-sudo chmod +x /etc/sv/spice-vdagent/run /etc/sv/qemu-guest-agent/run
+sudo chmod +x /etc/sv/spice-vdagent/run
 sudo ln -sf /etc/sv/spice-vdagent    /var/service/ 2>/dev/null || true
-sudo ln -sf /etc/sv/qemu-guest-agent /var/service/ 2>/dev/null || true
 
 # ── System configuration (kernel params, sudoers, ntp, limits) ────────────────
 sudo bash "$BASE/scripts/sysconfig.sh"

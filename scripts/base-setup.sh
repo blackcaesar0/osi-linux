@@ -4,6 +4,10 @@ set -euo pipefail
 
 xbps-install -Su
 
+# Enable nonfree repo (needed for nmap and others)
+xbps-install -y void-repo-nonfree
+xbps-install -Su
+
 # Core system utilities
 xbps-install -y \
     curl wget git vim nano \
@@ -40,7 +44,7 @@ xbps-install -y \
     libnetfilter_queue-devel \
     libnl3-devel \
     libnfnetlink-devel \
-    krb5-devel \
+    mit-krb5-devel \
     libssh2-devel \
     libxml2-devel \
     libxslt-devel \
@@ -53,13 +57,13 @@ xbps-install -y \
     ruby ruby-devel \
     go \
     openjdk17 openjdk17-jre \
-    nodejs npm \
+    nodejs \
     perl
 
 # Fonts
 xbps-install -y \
     dejavu-fonts-ttf \
-    font-jetbrains-mono \
+    font-hack-ttf \
     noto-fonts-ttf \
     noto-fonts-emoji
 
@@ -69,7 +73,7 @@ xbps-install -y \
     tcpdump wireshark \
     socat \
     net-tools iproute2 \
-    bind-tools whois traceroute
+    bind-utils whois traceroute
 
 # Binary analysis, debugging, monitoring
 # Note: xxd ships inside the vim package — no vim-common in Void

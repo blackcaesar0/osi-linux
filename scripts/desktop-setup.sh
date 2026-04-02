@@ -10,7 +10,7 @@ xbps-install -y \
     rofi \
     picom \
     feh \
-    ly \
+    emptty \
     papirus-icon-theme \
     ImageMagick \
     scrot \
@@ -25,6 +25,6 @@ xbps-install -y \
     xterm slock
 
 ln -sf /etc/sv/NetworkManager /var/service/
-ln -sf /etc/sv/ly /var/service/
+ln -sf /etc/sv/emptty /var/service/
 
 echo "==> Desktop packages installed."
