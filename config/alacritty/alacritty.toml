@@ -1,7 +1,7 @@
 [window]
-padding = { x = 10, y = 8 }
+padding = { x = 12, y = 10 }
 decorations = "none"
-opacity = 0.95
+opacity = 0.92
 dynamic_title = true
 
 [font]
@@ -11,31 +11,43 @@ italic  = { family = "Hack", style = "Italic" }
 size    = 11.0
 
 [colors.primary]
-background = "#000000"
-foreground = "#e0e0e0"
+background = "#0a0a0f"
+foreground = "#c0caf5"
 
 [colors.cursor]
-text   = "#000000"
-cursor = "#ffffff"
+text   = "#0a0a0f"
+cursor = "#00ffcc"
+
+[colors.vi_mode_cursor]
+text   = "#0a0a0f"
+cursor = "#7b68ee"
+
+[colors.selection]
+text       = "#c0caf5"
+background = "#1a1b2e"
+
+[colors.search.matches]
+foreground = "#0a0a0f"
+background = "#00ffcc"
 
 [colors.normal]
-black   = "#1a1a1a"
-red     = "#cc3333"
-green   = "#5faf5f"
-yellow  = "#d7af5f"
-blue    = "#5f87af"
-magenta = "#875f87"
-cyan    = "#5fafaf"
-white   = "#c0c0c0"
+black   = "#12121a"
+red     = "#f7768e"
+green   = "#9ece6a"
+yellow  = "#e0af68"
+blue    = "#7aa2f7"
+magenta = "#bb9af7"
+cyan    = "#7dcfff"
+white   = "#c0caf5"
 
 [colors.bright]
-black   = "#555555"
-red     = "#ff5555"
-green   = "#87d75f"
-yellow  = "#ffff5f"
-blue    = "#87afff"
-magenta = "#af87ff"
-cyan    = "#5fd7d7"
+black   = "#565f89"
+red     = "#f7768e"
+green   = "#9ece6a"
+yellow  = "#e0af68"
+blue    = "#7aa2f7"
+magenta = "#bb9af7"
+cyan    = "#00ffcc"
 white   = "#ffffff"
 
 [cursor]

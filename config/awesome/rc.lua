@@ -5,6 +5,7 @@ local wibox         = require("wibox")
 local beautiful     = require("beautiful")
 local naughty       = require("naughty")
 local hotkeys_popup = require("awful.hotkeys_popup")
+local dpi           = require("beautiful.xresources").apply_dpi
 
 -- Error handling
 if awesome.startup_errors then
@@ -30,6 +31,12 @@ beautiful.init(gears.filesystem.get_configuration_dir() .. "theme.lua")
 local terminal = "alacritty"
 local modkey   = "Mod4"
 
+-- Accent color (matches theme)
+local accent = "#00ffcc"
+local bg     = "#0a0a0f"
+local bg_mid = "#1a1b2e"
+local fg_dim = "#565f89"
+
 -- Layouts
 awful.layout.layouts = {
     awful.layout.suit.tile,
@@ -41,7 +48,7 @@ awful.layout.layouts = {
     awful.layout.suit.floating,
 }
 
--- Wallpaper — set reliably for every screen
+-- Wallpaper
 local function set_wallpaper(s)
     if beautiful.wallpaper then
         local wallpaper = beautiful.wallpaper
@@ -51,7 +58,39 @@ local function set_wallpaper(s)
 end
 screen.connect_signal("property::geometry", set_wallpaper)
 
--- Taglist and tasklist mouse buttons
+-- Widget helpers
+local function make_separator(color, width)
+    return wibox.widget {
+        {
+            forced_width = dpi(width or 1),
+            color        = color or fg_dim .. "44",
+            widget       = wibox.widget.separator,
+            orientation  = "vertical",
+        },
+        top    = dpi(8),
+        bottom = dpi(8),
+        widget = wibox.container.margin,
+    }
+end
+
+local function make_pill(widget, bg_color, fg_color)
+    return wibox.widget {
+        {
+            widget,
+            left   = dpi(10),
+            right  = dpi(10),
+            top    = dpi(4),
+            bottom = dpi(4),
+            widget = wibox.container.margin,
+        },
+        bg     = bg_color or bg_mid,
+        fg     = fg_color or accent,
+        shape  = function(cr, w, h) gears.shape.rounded_rect(cr, w, h, dpi(4)) end,
+        widget = wibox.container.background,
+    }
+end
+
+-- Taglist mouse buttons
 local taglist_buttons = gears.table.join(
     awful.button({},         1, function(t) t:view_only() end),
     awful.button({ modkey }, 1, function(t) if client.focus then client.focus:move_to_tag(t) end end),
@@ -83,44 +122,127 @@ awful.screen.connect_for_each_screen(function(s)
         awful.button({}, 3, function() awful.layout.inc(-1) end)
     ))
 
+    -- Taglist with custom styling
     s.mytaglist = awful.widget.taglist {
         screen  = s,
         filter  = awful.widget.taglist.filter.all,
         buttons = taglist_buttons,
-        style   = { shape = gears.shape.rectangle },
-        layout  = { spacing = 0, layout = wibox.layout.fixed.horizontal },
+        style   = {
+            shape = function(cr, w, h) gears.shape.rounded_rect(cr, w, h, dpi(4)) end,
+        },
+        layout  = {
+            spacing = dpi(4),
+            layout  = wibox.layout.fixed.horizontal,
+        },
         widget_template = {
             {
-                { id = "text_role", widget = wibox.widget.textbox },
-                left = 8, right = 8,
-                widget = wibox.container.margin
+                {
+                    { id = "text_role", widget = wibox.widget.textbox },
+                    left   = dpi(10),
+                    right  = dpi(10),
+                    top    = dpi(3),
+                    bottom = dpi(3),
+                    widget = wibox.container.margin,
+                },
+                id     = "background_role",
+                widget = wibox.container.background,
+                shape  = function(cr, w, h) gears.shape.rounded_rect(cr, w, h, dpi(4)) end,
             },
-            id     = "background_role",
-            widget = wibox.container.background,
+            top    = dpi(4),
+            bottom = dpi(4),
+            widget = wibox.container.margin,
         },
     }
 
+    -- Tasklist
     s.mytasklist = awful.widget.tasklist {
         screen  = s,
         filter  = awful.widget.tasklist.filter.currenttags,
         buttons = tasklist_buttons,
-        style   = { shape = gears.shape.rectangle },
+        style   = { shape = function(cr, w, h) gears.shape.rounded_rect(cr, w, h, dpi(4)) end },
     }
 
-    s.mywibox = awful.wibar({ position = "top", screen = s, height = beautiful.wibar_height })
+    -- Clock widget
+    local clock = wibox.widget {
+        format = " %H:%M ",
+        font   = "Hack Bold 10",
+        widget = wibox.widget.textclock,
+    }
+    local date_widget = wibox.widget {
+        format = " %Y-%m-%d ",
+        font   = "Hack 9",
+        widget = wibox.widget.textclock,
+    }
+
+    -- Layout indicator
+    local layout_pill = make_pill(
+        wibox.widget {
+            s.mylayoutbox,
+            forced_width  = dpi(16),
+            forced_height = dpi(16),
+            widget        = wibox.container.place,
+        },
+        bg_mid
+    )
+
+    -- Wibar
+    s.mywibox = awful.wibar({
+        position = "top",
+        screen   = s,
+        height   = beautiful.wibar_height,
+    })
+
     s.mywibox:setup {
         layout = wibox.layout.align.horizontal,
+        -- Left: taglist
         {
             layout = wibox.layout.fixed.horizontal,
-            s.mytaglist,
-            s.mypromptbox,
+            {
+                s.mytaglist,
+                left  = dpi(6),
+                right = dpi(6),
+                widget = wibox.container.margin,
+            },
+            make_separator(),
+            {
+                s.mypromptbox,
+                left = dpi(6),
+                widget = wibox.container.margin,
+            },
         },
-        s.mytasklist,
+        -- Center: tasklist
+        {
+            s.mytasklist,
+            left  = dpi(12),
+            right = dpi(12),
+            widget = wibox.container.margin,
+        },
+        -- Right: systray + clock + layout
         {
             layout = wibox.layout.fixed.horizontal,
-            wibox.widget.systray(),
-            wibox.widget.textclock("  %Y-%m-%d  %H:%M  "),
-            s.mylayoutbox,
+            {
+                wibox.widget.systray(),
+                top    = dpi(6),
+                bottom = dpi(6),
+                right  = dpi(6),
+                widget = wibox.container.margin,
+            },
+            make_separator(),
+            make_pill(date_widget, bg_mid, fg_dim),
+            {
+                forced_width = dpi(4),
+                widget       = wibox.container.margin,
+            },
+            make_pill(clock, bg_mid, accent),
+            {
+                forced_width = dpi(4),
+                widget       = wibox.container.margin,
+            },
+            layout_pill,
+            {
+                forced_width = dpi(6),
+                widget       = wibox.container.margin,
+            },
         },
     }
 end)
