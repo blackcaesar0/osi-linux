@@ -50,9 +50,14 @@ pip install --quiet pipx
 pipx ensurepath
 
 # Ruby — for metasploit, evil-winrm, and similar tools
+# --without-ext=psych overrides ruby-build's hardcoded --with-ext=openssl,psych,+
+# psych can be installed as a gem later once ruby is up; libyaml-devel is
+# still needed at that point but won't block the initial ruby build.
 echo "==> Installing Ruby 3.2.4..."
-rbenv install -s 3.2.4
+RUBY_CONFIGURE_OPTS="--without-ext=psych" rbenv install -s 3.2.4
 rbenv global 3.2.4
+# Install psych as a gem so tools that need it still work
+gem install psych 2>/dev/null || true
 
 echo "==> Version managers ready."
 echo "    Python: $(python --version 2>&1)"
