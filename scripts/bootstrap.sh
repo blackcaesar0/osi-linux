@@ -13,7 +13,7 @@ VM_HOSTNAME="${VM_HOSTNAME:-osi}"
 DISK="${DISK_IMAGE:-$REAL_HOME/VM/osi-linux.qcow2}"
 DISK_RAW="${DISK%.qcow2}.raw"
 MNT="/mnt/voidroot"
-REPO="https://repo-default.voidlinux.org/current"
+REPO="${REPO:-https://repo-default.voidlinux.org/current}"
 XBPS_DIR="$REAL_HOME/VM/bootstrap"
 XBPS_STATIC="$XBPS_DIR/usr/bin/xbps-install.static"
 
