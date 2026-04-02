@@ -24,8 +24,15 @@ LOOP=""
 cleanup() {
     echo "==> Cleaning up..."
     sync
-    umount -R "$MNT"     2>/dev/null || true
-    [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null || true
+    umount -R "$MNT" 2>/dev/null || true
+    if [ -n "$LOOP" ]; then
+        if ! losetup -d "$LOOP" 2>/dev/null; then
+            echo "WARNING: Could not detach loop device $LOOP — mounts may still be active."
+            echo "         Run manually: sudo umount -R $MNT && sudo losetup -d $LOOP"
+            echo "         Keeping $DISK_RAW to prevent data loss."
+            return
+        fi
+    fi
     rm -f "$DISK_RAW"
 }
 trap cleanup EXIT
