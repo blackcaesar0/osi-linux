@@ -105,21 +105,25 @@ if [ -z "$KVER" ]; then
 fi
 echo "    Kernel: $KVER"
 
-# Try dracut with dmsquash-live; fall back to basic initramfs if module is absent
-if chroot "$ROOTFS" dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
-    step "Building dracut initramfs with dmsquash-live module"
-    chroot "$ROOTFS" dracut --force \
-        --add "dmsquash-live" \
-        --kver "$KVER" \
-        /boot/initramfs-live.img
-else
-    echo "WARNING: dmsquash-live module not available in dracut."
-    echo "         Building standard initramfs. Consider using void-mklive instead."
-    echo "         See docs/build-iso.md for details."
-    chroot "$ROOTFS" dracut --force \
-        --kver "$KVER" \
-        /boot/initramfs-live.img
+# dmsquash-live is required for live ISO boot (rd.live.image kernel param)
+# Try installing dracut-live to ensure the module is present
+chroot "$ROOTFS" xbps-install -y dracut-live 2>/dev/null || true
+
+if ! chroot "$ROOTFS" dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
+    echo "ERROR: dmsquash-live module not available in dracut."
+    echo "       This module is required for live ISO boot (rd.live.image)."
+    echo "       A standard initramfs will NOT boot from this ISO."
+    echo "       Options:"
+    echo "         1. Install dracut-live: xbps-install -y dracut-live"
+    echo "         2. Use void-mklive instead (see docs/build-iso.md)"
+    exit 1
 fi
+
+step "Building dracut initramfs with dmsquash-live module"
+chroot "$ROOTFS" dracut --force \
+    --add "dmsquash-live" \
+    --kver "$KVER" \
+    /boot/initramfs-live.img
 
 # ── Locate kernel image ───────────────────────────────────────────────────────
 VMLINUZ=$(ls "$ROOTFS/boot/vmlinuz-"* 2>/dev/null | sort -V | tail -1)
