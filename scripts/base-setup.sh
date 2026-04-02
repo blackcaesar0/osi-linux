@@ -23,7 +23,7 @@ xbps-install -y \
 # Build essentials
 # Note: gcc in Void includes C++ support — no separate gcc-c++ package
 xbps-install -y \
-    gcc make cmake \
+    gcc make cmake patch \
     autoconf automake libtool pkg-config \
     binutils glibc-devel linux-headers \
     git-lfs
