@@ -48,6 +48,7 @@ xbps-install -y \
     libssh2-devel \
     libxml2-devel \
     libxslt-devel \
+    libyaml-devel \
     postgresql-libs-devel \
     sqlite
 
