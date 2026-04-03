@@ -186,8 +186,8 @@ grub-mkrescue \
     "$ISO_STAGE" \
     -- \
     -volid "OSI_LIVE" \
-    -joliet -joliet-long \
-    -rock
+    -joliet on \
+    -rockridge on
 
 chown "$REAL_USER:$REAL_USER" "$OUTPUT_ISO"
 
