@@ -2,10 +2,13 @@
 # Launch the OSI Linux VM with KVM, UEFI/OVMF, SPICE, and virtio devices.
 set -euo pipefail
 
-DISK="$HOME/VM/osi-linux.qcow2"
-VARS="$HOME/VM/osi-linux-efi-vars.fd"
+DISK="${DISK_IMAGE:-$HOME/VM/osi-linux.qcow2}"
+VARS="${DISK%.qcow2}-efi-vars.fd"
 PIDFILE="/tmp/osi-vm.pid"
 ISO="${1:-}"
+VM_CORES="${VM_CORES:-4}"
+VM_THREADS="${VM_THREADS:-2}"
+VM_RAM="${VM_RAM:-8G}"
 
 # ── OVMF firmware detection ───────────────────────────────────────────────────
 find_ovmf_code() {
@@ -70,8 +73,8 @@ fi
 QEMU_ARGS=(
     -machine type=q35,accel=kvm
     -cpu host
-    -smp cores=4,threads=2
-    -m 8G
+    -smp "cores=${VM_CORES},threads=${VM_THREADS}"
+    -m "$VM_RAM"
 )
 
 # UEFI firmware
