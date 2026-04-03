@@ -127,8 +127,12 @@ if ! dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
 fi
 
 step "Building dracut live initramfs using host dracut"
+# Exclude systemd modules — the host (Ubuntu) uses systemd but Void uses runit.
+# Without this, dracut pulls in systemd-init/systemd-shutdown from the host
+# which conflicts with the Void rootfs and causes immediate halt on boot.
 dracut --force \
     --add "dmsquash-live" \
+    --omit "systemd systemd-initrd systemd-networkd systemd-hostnamed systemd-resolved systemd-timedated systemd-tmpfiles systemd-journald systemd-sysctl systemd-modules-load systemd-vconsole-setup systemd-sysusers systemd-repart systemd-pcrphase systemd-udevd" \
     --kver "$KVER" \
     --kmoddir "$ROOTFS/lib/modules/$KVER" \
     --fwdir "$ROOTFS/lib/firmware" \
