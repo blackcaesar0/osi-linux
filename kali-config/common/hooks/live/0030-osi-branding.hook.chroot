@@ -44,19 +44,31 @@ cat > /etc/motd << 'EOF'
   │  Default creds:  osi / osi          │
   │  Change them:    passwd             │
   │                                     │
-  │  Keybindings:    Win+s              │
-  │  Terminal:       Win+Return         │
-  │  Launcher:       Win+d              │
+  │  Desktop:        XFCE               │
+  │  Terminal:       Ctrl+Alt+T         │
+  │  File manager:   Thunar             │
   └─────────────────────────────────────┘
 
 EOF
 
 # ── Set wallpaper as default background ───────────────────────────────────────
 if [ -f /usr/share/backgrounds/osi/osi.png ]; then
-    # Link as default background for display managers
     mkdir -p /usr/share/backgrounds
     ln -sf /usr/share/backgrounds/osi/osi.png /usr/share/backgrounds/default.png 2>/dev/null || true
 fi
+
+# ── XFCE clipman autostart (persistent clipboard) ────────────────────────────
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/xfce4-clipman-plugin-autostart.desktop << 'EOF'
+[Desktop Entry]
+Hidden=false
+Name=Clipman
+Comment=Clipboard Manager
+Exec=xfce4-clipman
+Icon=xfce4-clipman-plugin
+Type=Application
+X-XFCE-Autostart-Override=true
+EOF
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 echo "[OSI] Cleaning up..."

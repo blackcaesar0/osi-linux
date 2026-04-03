@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # OSI Linux — System configuration hook
 # Runs inside the chroot during ISO build.
-# Configures kernel params, sudoers, limits, timezone, and services.
+# Configures kernel params, services, SPICE integration (clipboard + resize).
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -52,14 +52,44 @@ systemctl enable ssh 2>/dev/null || true
 systemctl enable NetworkManager 2>/dev/null || true
 systemctl enable spice-vdagentd 2>/dev/null || true
 systemctl enable qemu-guest-agent 2>/dev/null || true
+systemctl enable lightdm 2>/dev/null || true
 
 # ── SPICE/QXL X11 config for VM ──────────────────────────────────────────────
+# QXL driver with auto-resize support
 mkdir -p /etc/X11/xorg.conf.d
 cat > /etc/X11/xorg.conf.d/10-spice-qxl.conf << 'EOF'
 Section "Device"
     Identifier "QXL Video"
     Driver     "qxl"
 EndSection
+EOF
+
+# ── SPICE vdagent auto-resize on login ────────────────────────────────────────
+# Ensure spice-vdagent runs at session start for immediate resize + clipboard
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/spice-vdagent.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=SPICE Agent
+Comment=SPICE guest agent for clipboard and display resize
+Exec=/usr/bin/spice-vdagent
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true
+EOF
+
+# Trigger an immediate resize when X session starts
+cat > /etc/xdg/autostart/osi-resize-display.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=OSI Display Resize
+Comment=Trigger display resize on login
+Exec=sh -c "sleep 1 && xrandr --output Virtual-0 --auto 2>/dev/null; xrandr --output Virtual0 --auto 2>/dev/null; true"
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true
 EOF
 
 echo "[OSI] System configuration complete."

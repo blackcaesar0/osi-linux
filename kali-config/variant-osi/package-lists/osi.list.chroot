@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # OSI Linux — Package List
-# Curated selection: stable, fast, QEMU/KVM optimized.
-# Based on Kali but leaner — no bloat, only what matters.
+# Kali-based with XFCE desktop, QEMU/KVM optimized.
+# Everything is baked into the ISO — no post-install scripts needed.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Kali core ─────────────────────────────────────────────────────────────────
@@ -9,26 +9,25 @@ kali-linux-core
 kali-defaults
 kali-archive-keyring
 
-# ── Desktop: awesome WM stack (no XFCE/GNOME) ────────────────────────────────
-xorg
-awesome
-alacritty
-rofi
-picom
-feh
-slock
-scrot
-flameshot
-papirus-icon-theme
+# ── Desktop: XFCE ────────────────────────────────────────────────────────────
+kali-desktop-xfce
+xfce4
+xfce4-goodies
+xfce4-terminal
+xfce4-clipman-plugin
+xfce4-power-manager
+xfce4-whiskermenu-plugin
+lightdm
+lightdm-gtk-greeter
+lightdm-gtk-greeter-settings
 fonts-hack
 fonts-noto
 fonts-noto-color-emoji
-lxappearance
-dunst
-xclip
-xdotool
-xterm
+papirus-icon-theme
+kali-themes
+kali-wallpapers
 dbus-x11
+xdg-utils
 
 # ── File manager and editors ──────────────────────────────────────────────────
 thunar
@@ -57,10 +56,16 @@ fzf
 network-manager
 network-manager-gnome
 
-# ── QEMU/KVM guest integration ───────────────────────────────────────────────
+# ── QEMU/KVM guest integration (clipboard, auto-resize) ─────────────────────
 spice-vdagent
 qemu-guest-agent
 xserver-xorg-video-qxl
+
+# ── Screenshot / screen tools ────────────────────────────────────────────────
+scrot
+flameshot
+xclip
+xdotool
 
 # ── Development ───────────────────────────────────────────────────────────────
 git
@@ -208,5 +213,5 @@ zathura
 docker.io
 docker-compose
 
-# ── ImageMagick (for icon theme generation) ───────────────────────────────────
+# ── ImageMagick ───────────────────────────────────────────────────────────────
 imagemagick

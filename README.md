@@ -2,21 +2,22 @@
 
 A custom Kali-based distribution built for penetration testing and offensive security operations. Runs as a QEMU/KVM virtual machine with full SPICE integration, or boots from USB.
 
-Leaner than stock Kali — awesome WM tiling desktop, curated tool selection, cyberpunk dark theme, QEMU/KVM optimized out of the box.
+XFCE desktop with OSI team branding, curated tool selection, copy/paste and auto-resize working out of the box.
 
 ---
 
 ## Features
 
 - **Kali rolling base** — access to Kali's entire tool repository via `apt`
-- **awesome WM** — fast tiling desktop with 9 named workspaces, no XFCE/GNOME bloat
-- **Cyberpunk theme** — dark base with cyan accents across all apps (alacritty, rofi, tmux, vim)
+- **XFCE desktop** — clean, familiar desktop with OSI dark theme
+- **Copy/paste works immediately** — SPICE vdagent + clipman, no configuration needed
+- **Auto-resize display** — resize the SPICE window and the guest follows instantly
+- **OSI team theme** — dark base with custom branding, Papirus-Dark icons, Hack font
 - **SPICE + QEMU guest agent** — clipboard sharing, display auto-resize, USB redirection
 - **Curated tools** — metasploit, nmap, burpsuite, bloodhound, impacket, hashcat, ghidra, and more
 - **Development ready** — Python 3, Ruby, Go, Node.js, Java, full build toolchain
-- **picom compositor** — blur, shadows, rounded corners, smooth fading
 - **Live ISO** — boot from USB or run in QEMU, install to disk when ready
-- **Everything pre-configured** — no post-install scripts to run, it just works
+- **Everything baked in** — no post-install scripts, it just works
 
 ---
 
@@ -37,7 +38,7 @@ sudo apt install git live-build cdebootstrap devscripts
 sudo ./build.sh
 ```
 
-Build takes 30–90 minutes. The ISO lands in `build/`.
+Build takes 30-90 minutes. The ISO lands in `build/`.
 
 ### Option 2: Run in QEMU/KVM
 
@@ -70,41 +71,19 @@ sudo dd if=build/osi-linux-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 
 ---
 
-## Desktop Keybindings
-
-Mod key = Super (Win).
-
-| Key | Action |
-|-----|--------|
-| `Mod+Return` | Terminal (alacritty) |
-| `Mod+d` | App launcher (rofi) |
-| `Mod+e` | File manager (ranger) |
-| `Mod+1-9` | Switch workspace |
-| `Mod+Shift+c` | Close window |
-| `Mod+f` | Fullscreen |
-| `Mod+s` | Show all keybindings |
-| `Mod+Ctrl+l` | Lock screen |
-| `Print` | Screenshot |
-| `Shift+Print` | Screenshot (select region) |
-
-See [docs/keybindings.md](docs/keybindings.md) for the complete reference.
-
----
-
 ## Project Structure
 
 ```
 osi-linux/
 ├── build.sh                 Build script (wraps Kali live-build)
 ├── launch-vm.sh             QEMU/KVM launcher
-├── config/                  Desktop configs (awesome, alacritty, rofi, picom, tmux, vim)
+├── config/                  Desktop configs (xfce4, tmux, vim, shell)
 ├── kali-config/
 │   ├── variant-osi/
 │   │   └── package-lists/   Curated package selection
 │   └── common/
 │       ├── hooks/live/      Build-time config hooks
-│       ├── includes.chroot/ Files overlaid into the rootfs
-│       └── includes.binary/ Files on the ISO media
+│       └── includes.chroot/ Files overlaid into the rootfs
 ├── scripts/
 │   ├── create-vm.sh         Create qcow2 disk + boot installer
 │   └── cleanup-host.sh      Remove build artifacts
@@ -144,16 +123,3 @@ The VM runs with:
 - SPICE display with clipboard + USB redirect
 - Audio via SPICE (intel-hda)
 - SSH forwarded on host port 2222
-
----
-
-## Why OSI over stock Kali?
-
-| | Stock Kali | OSI Linux |
-|---|---|---|
-| Desktop | XFCE (heavy) | awesome WM (fast, tiling) |
-| Tools | 600+ (bloated) | Curated essentials |
-| ISO size | ~4 GB | ~2-3 GB |
-| VM integration | Basic | Full SPICE + guest agent |
-| Theme | Kali blue | Cyberpunk dark + cyan |
-| Post-install | Manual config | Pre-configured |
