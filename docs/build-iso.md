@@ -39,7 +39,19 @@ sudo bash scripts/build-iso.sh ~/releases/osi-linux-custom.iso
 
 The output ISO is placed at `~/VM/osi-linux-YYYYMMDD.iso` by default and is owned by your real user.
 
-Build time: 30–60 minutes depending on download speed and CPU. Most of the time is compiling Python inside the rootfs.
+Build time: 30–60 minutes depending on download speed and CPU.
+
+### Environment variable overrides
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `REPO` | Void default mirror | Void Linux package mirror URL |
+| `WORK_DIR` | `/tmp/osi-iso-work` | Scratch space for the build |
+
+Example:
+```sh
+sudo REPO=https://mirrors.dotsrc.org/voidlinux/current bash scripts/build-iso.sh
+```
 
 ---
 
@@ -48,7 +60,7 @@ Build time: 30–60 minutes depending on download speed and CPU. Most of the tim
 1. Downloads static xbps (same as bootstrap.sh)
 2. Creates a clean rootfs and bootstraps Void Linux base into it
 3. Runs `base-setup.sh` and `desktop-setup.sh` inside a chroot
-4. Installs `dracut` and builds a live-boot initramfs using the `dmsquash-live` module
+4. Installs `dracut` and `dracut-live`, then builds a live-boot initramfs using the `dmsquash-live` module
 5. Packs the rootfs into a compressed squashfs image
 6. Assembles the ISO directory structure with GRUB boot config
 7. Calls `grub-mkrescue` to produce a hybrid EFI+BIOS ISO
@@ -56,11 +68,13 @@ Build time: 30–60 minutes depending on download speed and CPU. Most of the tim
 
 ---
 
-## Known Risk: dracut-live on Void Linux
+## Requirement: dmsquash-live
 
-The `dmsquash-live` module ships with dracut on most distributions but may not be present in Void's dracut package. If step 4 fails with an error about a missing module:
+The `dmsquash-live` dracut module is **required** for live ISO boot. The build script attempts to install `dracut-live` automatically inside the chroot, then checks for the module. If it is still missing, the build **errors out** rather than producing an unbootable ISO.
 
-**Option A — Use void-mklive (recommended fallback)**
+If you hit this error:
+
+**Option A — Use void-mklive (recommended)**
 
 The Void Linux project provides `void-mklive`, a set of scripts specifically designed for building Void live images. It handles the initramfs internally without relying on dmsquash-live.
 

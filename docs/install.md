@@ -40,7 +40,7 @@ cd osi-linux
 
 ## Step 2: Bootstrap
 
-This creates the qcow2 disk image and installs a minimal Void Linux base system onto it. Run as root on the host.
+This creates the qcow2 disk image, installs a minimal Void Linux base system, and embeds the setup scripts into the VM so they are ready to run on first boot.
 
 ```sh
 sudo bash scripts/bootstrap.sh
@@ -53,15 +53,25 @@ You will be prompted for username, keyboard layout, root password, and user pass
 3. Bootstraps Void Linux base into the root partition
 4. Configures hostname, locale, fstab, user accounts
 5. Builds a standalone UEFI boot binary (BOOTX64.EFI) with embedded GRUB config
-6. Converts the raw disk to qcow2 format
-
-To customise disk size or hostname:
-
-```sh
-sudo DISK_SIZE=120G VM_HOSTNAME=pentest bash scripts/bootstrap.sh
-```
+6. Copies the osi-setup scripts into `/home/$VM_USER/osi-setup` inside the VM
+7. Converts the raw disk to qcow2 format
 
 Bootstrap takes 5–10 minutes depending on your connection speed.
+
+### Environment variable overrides
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DISK_SIZE` | `80G` | Size of the disk image |
+| `DISK_IMAGE` | `~/VM/osi-linux.qcow2` | Output path for the qcow2 |
+| `VM_HOSTNAME` | `osi` | Hostname inside the VM |
+| `REPO` | Void default mirror | Void Linux package mirror URL |
+| `TZ` | `UTC` | Timezone |
+
+Example:
+```sh
+sudo DISK_SIZE=120G VM_HOSTNAME=pentest REPO=https://mirrors.dotsrc.org/voidlinux/current bash scripts/bootstrap.sh
+```
 
 ---
 
@@ -81,25 +91,28 @@ virt-viewer spice://localhost:5900
 
 At the login prompt, log in as `root` with the password you set during bootstrap.
 
----
+### VM resource overrides
 
-## Step 4: Transfer the Project into the Guest
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DISK_IMAGE` | `~/VM/osi-linux.qcow2` | Disk image to boot |
+| `VM_CORES` | `4` | CPU cores |
+| `VM_THREADS` | `2` | Threads per core |
+| `VM_RAM` | `8G` | RAM |
 
-The easiest way is SSH (forwarded on host port 2222):
-
+Example:
 ```sh
-# From the host:
-scp -P 2222 -r osi-linux/ youruser@localhost:~/osi-setup/
+VM_CORES=8 VM_RAM=16G ./launch-vm.sh
 ```
 
-Or use a shared directory via SPICE file transfer, or a USB image mount — any method works.
-
 ---
 
-## Step 5: Base System Setup (as root inside the guest)
+## Step 4: Base System Setup (as root inside the guest)
+
+The setup scripts are already inside the VM at `~/osi-setup`. No file transfer needed.
 
 ```sh
-bash ~/osi-setup/scripts/base-setup.sh
+sudo bash ~/osi-setup/scripts/base-setup.sh
 ```
 
 This installs all packages: build tools, development headers, runtimes (Python, Ruby, Go, Node, Java, Perl), QEMU/SPICE guest tools, and essential pentest tools (nmap, tcpdump, wireshark, socat, etc.).
@@ -108,19 +121,19 @@ Takes 3–5 minutes.
 
 ---
 
-## Step 6: Desktop Setup (as root inside the guest)
+## Step 5: Desktop Setup (as root inside the guest)
 
 ```sh
-bash ~/osi-setup/scripts/desktop-setup.sh
+sudo bash ~/osi-setup/scripts/desktop-setup.sh
 ```
 
-This installs Xorg, QXL video driver, awesome WM, alacritty, rofi, picom, emptty display manager, Firefox, ranger, mousepad, zathura, flameshot, and slock. It also enables NetworkManager, emptty, spice-vdagent, and qemu-guest-agent services.
+This installs Xorg, QXL video driver, awesome WM, alacritty, rofi, picom, emptty display manager, Firefox, ranger, mousepad, zathura, flameshot, and slock. It also enables NetworkManager and emptty services.
 
 Takes 2–4 minutes.
 
 ---
 
-## Step 7: Deploy Configs (as your desktop user, NOT root)
+## Step 6: Deploy Configs (as your desktop user, NOT root)
 
 ```sh
 bash ~/osi-setup/scripts/deploy-configs.sh
@@ -131,6 +144,7 @@ bash ~/osi-setup/scripts/deploy-configs.sh
 This script calls several sub-scripts automatically:
 
 - Copies all config files (awesome, alacritty, rofi, picom, tmux, vim)
+- Deploys runit service scripts for spice-vdagent and qemu-guest-agent
 - Creates `~/.xinitrc` for dbus-launch + awesome session
 - Runs `sysconfig.sh` (kernel params, sudoers, NTP, resource limits)
 - Cleans up any leftover rbenv installation
@@ -140,9 +154,14 @@ This script calls several sub-scripts automatically:
 
 Python version compilation takes 10–20 minutes total. This is normal.
 
+To install specific Python versions instead of the defaults:
+```sh
+PYTHON_VERSIONS="3.11.9 3.12.3" PYTHON_GLOBAL=3.12.3 bash ~/osi-setup/scripts/version-managers.sh
+```
+
 ---
 
-## Step 8: Reboot
+## Step 7: Reboot
 
 ```sh
 sudo reboot
