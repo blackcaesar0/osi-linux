@@ -113,6 +113,136 @@ chroot "$ROOTFS" usermod -p "$OSI_HASH" osi   || { echo "ERROR: failed to set os
 chroot "$ROOTFS" usermod -p "$ROOT_HASH" root  || { echo "ERROR: failed to set root password"; exit 1; }
 echo "    Live user: osi/osi  Root: root/root"
 
+# ── Copy project into rootfs ─────────────────────────────────────────────────
+step "Copying osi-setup scripts into live image"
+SETUP_DEST="$ROOTFS/home/osi/osi-setup"
+rm -rf "$SETUP_DEST"
+cp -r "$PROJECT_DIR" "$SETUP_DEST"
+rm -rf "$SETUP_DEST/VM"
+chroot "$ROOTFS" chown -R osi:osi /home/osi/osi-setup
+echo "    Scripts available at ~/osi-setup inside the live image"
+
+# ── Deploy configs directly (chroot-safe) ────────────────────────────────────
+# Cannot run deploy-configs.sh as-is because sysctl and git clones fail in
+# chroot.  Instead, deploy configs and services directly.
+step "Deploying desktop configs for osi user"
+OSI_HOME="$ROOTFS/home/osi"
+
+# Config directories
+mkdir -p "$OSI_HOME/.config/awesome" \
+         "$OSI_HOME/.config/alacritty" \
+         "$OSI_HOME/.config/rofi" \
+         "$OSI_HOME/.config/picom" \
+         "$OSI_HOME/wallpaper" \
+         "$OSI_HOME/.local/bin" \
+         "$OSI_HOME/bin" \
+         "$OSI_HOME/tools"/{recon,exploitation,post-exploitation,web,network,forensics,custom,wordlists} \
+         "$OSI_HOME/go"/{bin,pkg,src}
+
+# Awesome WM
+cp "$PROJECT_DIR/config/awesome/rc.lua"           "$OSI_HOME/.config/awesome/"
+cp "$PROJECT_DIR/config/awesome/theme.lua"        "$OSI_HOME/.config/awesome/"
+
+# Application configs
+cp "$PROJECT_DIR/config/alacritty/alacritty.toml" "$OSI_HOME/.config/alacritty/"
+cp "$PROJECT_DIR/config/rofi/osi.rasi"            "$OSI_HOME/.config/rofi/"
+cp "$PROJECT_DIR/config/picom/picom.conf"         "$OSI_HOME/.config/picom/"
+cp "$PROJECT_DIR/wallpaper/osi.png"               "$OSI_HOME/wallpaper/"
+
+# Shell configs
+cp "$PROJECT_DIR/config/shell/bash_aliases"       "$OSI_HOME/.bash_aliases"
+cp "$PROJECT_DIR/config/vim/vimrc"                "$OSI_HOME/.vimrc"
+cp "$PROJECT_DIR/config/tmux/tmux.conf"           "$OSI_HOME/.tmux.conf"
+
+# .xinitrc — launch awesome via dbus
+cat > "$OSI_HOME/.xinitrc" << 'EOF'
+#!/bin/sh
+export XDG_SESSION_TYPE=x11
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+mkdir -p "$XDG_RUNTIME_DIR"
+exec dbus-launch --exit-with-session awesome
+EOF
+chmod +x "$OSI_HOME/.xinitrc"
+
+# Runit services (spice-vdagent, qemu-ga)
+cp -r "$PROJECT_DIR/config/runit/spice-vdagent" "$ROOTFS/etc/sv/" 2>/dev/null || true
+cp -r "$PROJECT_DIR/config/runit/qemu-ga"       "$ROOTFS/etc/sv/" 2>/dev/null || true
+chmod +x "$ROOTFS/etc/sv/spice-vdagent/run"     2>/dev/null || true
+chmod +x "$ROOTFS/etc/sv/qemu-ga/run"           2>/dev/null || true
+ln -sf /etc/sv/spice-vdagent "$ROOTFS/etc/runit/runsvdir/default/spice-vdagent" 2>/dev/null || true
+ln -sf /etc/sv/qemu-ga       "$ROOTFS/etc/runit/runsvdir/default/qemu-ga"       2>/dev/null || true
+
+# System config (sysctl, sudoers, limits, timezone) — skip sysctl -p in chroot
+mkdir -p "$ROOTFS/etc/sysctl.d" "$ROOTFS/etc/security/limits.d"
+cp "$PROJECT_DIR/scripts/sysconfig.sh" "$ROOTFS/tmp/"
+# Write sysctl and limits configs directly — sysctl -p cannot run in chroot
+cat > "$ROOTFS/etc/sysctl.d/99-osi.conf" << 'SYSCTL'
+net.core.rmem_max        = 134217728
+net.core.wmem_max        = 134217728
+net.core.rmem_default    = 16777216
+net.core.wmem_default    = 16777216
+net.ipv4.tcp_rmem        = 4096 87380 134217728
+net.ipv4.tcp_wmem        = 4096 65536 134217728
+net.core.netdev_max_backlog = 5000
+kernel.core_pattern      = /tmp/core.%e.%p
+kernel.core_uses_pid     = 1
+fs.suid_dumpable         = 2
+fs.inotify.max_user_watches   = 524288
+fs.inotify.max_user_instances = 512
+kernel.perf_event_paranoid = 1
+fs.file-max = 2097152
+SYSCTL
+cat > "$ROOTFS/etc/security/limits.d/99-osi.conf" << 'LIMITS'
+*    soft nofile  65535
+*    hard nofile  65535
+osi  soft nofile  1048576
+osi  hard nofile  1048576
+LIMITS
+
+# openntpd service
+mkdir -p "$ROOTFS/etc/sv/openntpd"
+cat > "$ROOTFS/etc/sv/openntpd/run" << 'EOF'
+#!/bin/sh
+exec /usr/sbin/ntpd -d -s -f /etc/ntpd.conf 2>&1
+EOF
+chmod +x "$ROOTFS/etc/sv/openntpd/run"
+ln -sf /etc/sv/openntpd "$ROOTFS/etc/runit/runsvdir/default/openntpd" 2>/dev/null || true
+
+# GTK + icon theme setup
+chroot "$ROOTFS" su - osi -c "bash /home/osi/osi-setup/scripts/setup-icons.sh" || true
+
+# Shell environment (bash_aliases, prompt, workspace stubs)
+chroot "$ROOTFS" su - osi -c "bash /home/osi/osi-setup/scripts/shell-env.sh" || true
+
+# Fix ownership on everything we touched
+chroot "$ROOTFS" chown -R osi:osi /home/osi
+
+# ── Configure emptty to auto-launch awesome for osi ──────────────────────────
+step "Setting emptty to default to awesome WM for osi"
+mkdir -p "$ROOTFS/etc/emptty"
+cat > "$ROOTFS/etc/emptty/conf" << 'EOF'
+TTY_NUMBER=7
+SWITCH_TTY=true
+PRINT_ISSUE=true
+PRINT_MOTD=false
+AUTOLOGIN=false
+DBUS_LAUNCH=true
+XINITRC_LAUNCH=true
+VERTICAL_SELECTION=false
+LOGGING=rotate
+FG_COLOR=LIGHT_WHITE
+BG_COLOR=BLACK
+DEFAULT_USER=osi
+EOF
+
+# Per-user emptty config — auto-select awesome
+mkdir -p "$OSI_HOME/.config/emptty"
+cat > "$OSI_HOME/.config/emptty/env" << 'EOF'
+DISPLAY_START_CMD=awesome
+XINITRC=$HOME/.xinitrc
+EOF
+chroot "$ROOTFS" chown -R osi:osi /home/osi/.config/emptty
+
 # ── Live boot initramfs ───────────────────────────────────────────────────────
 step "Building live initramfs"
 
