@@ -1,0 +1,65 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — System configuration hook
+# Runs inside the chroot during ISO build.
+# Configures kernel params, sudoers, limits, timezone, and services.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Configuring system..."
+
+# ── sysctl tuning ─────────────────────────────────────────────────────────────
+cat > /etc/sysctl.d/99-osi.conf << 'EOF'
+# Large socket buffers — helps scanners and packet capture
+net.core.rmem_max        = 134217728
+net.core.wmem_max        = 134217728
+net.core.rmem_default    = 16777216
+net.core.wmem_default    = 16777216
+net.ipv4.tcp_rmem        = 4096 87380 134217728
+net.ipv4.tcp_wmem        = 4096 65536 134217728
+net.core.netdev_max_backlog = 5000
+
+# Core dumps — exploit dev and debugging
+kernel.core_pattern      = /tmp/core.%e.%p
+kernel.core_uses_pid     = 1
+fs.suid_dumpable         = 2
+
+# inotify — monitoring tools exhaust defaults
+fs.inotify.max_user_watches   = 524288
+fs.inotify.max_user_instances = 512
+
+# Perf events — profiling and kernel exploit research
+kernel.perf_event_paranoid = 1
+
+# High open file limit at kernel level
+fs.file-max = 2097152
+EOF
+
+# ── Resource limits ───────────────────────────────────────────────────────────
+cat > /etc/security/limits.d/99-osi.conf << 'EOF'
+*    soft nofile  65535
+*    hard nofile  65535
+EOF
+
+# ── Timezone ──────────────────────────────────────────────────────────────────
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+
+# ── Hostname ──────────────────────────────────────────────────────────────────
+echo "osi" > /etc/hostname
+
+# ── Enable services ───────────────────────────────────────────────────────────
+systemctl enable ssh 2>/dev/null || true
+systemctl enable NetworkManager 2>/dev/null || true
+systemctl enable spice-vdagentd 2>/dev/null || true
+systemctl enable qemu-guest-agent 2>/dev/null || true
+
+# ── SPICE/QXL X11 config for VM ──────────────────────────────────────────────
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/10-spice-qxl.conf << 'EOF'
+Section "Device"
+    Identifier "QXL Video"
+    Driver     "qxl"
+EndSection
+EOF
+
+echo "[OSI] System configuration complete."

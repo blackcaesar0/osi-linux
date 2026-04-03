@@ -1,0 +1,196 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — Build a custom Kali-based live ISO using live-build
+# ──────────────────────────────────────────────────────────────────────────────
+# Usage: sudo ./build.sh [options]
+#   --variant osi          (default, the only variant for now)
+#   --distribution kali-rolling
+#   --arch amd64
+#   --output <path>        output ISO location
+#   --verbose              show all build output
+#   --clean                clean previous build first
+#
+# Prerequisites (Debian/Ubuntu/Kali host):
+#   sudo apt install git live-build cdebootstrap devscripts
+#
+# The result is a hybrid ISO: bootable from USB (dd) or optical media.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+# ── Defaults ──────────────────────────────────────────────────────────────────
+VARIANT="osi"
+DISTRIBUTION="kali-rolling"
+ARCH="amd64"
+VERBOSE=""
+DO_CLEAN=""
+OUTPUT_ISO=""
+
+# ── Parse arguments ───────────────────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --variant)      VARIANT="$2";       shift 2 ;;
+        --distribution) DISTRIBUTION="$2";  shift 2 ;;
+        --arch)         ARCH="$2";          shift 2 ;;
+        --output)       OUTPUT_ISO="$2";    shift 2 ;;
+        --verbose)      VERBOSE="--verbose"; shift ;;
+        --clean)        DO_CLEAN=1;         shift ;;
+        *)              echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_DIR="$PROJECT_DIR/build"
+
+step() { echo; echo "==> $*"; }
+
+# ── Preflight checks ─────────────────────────────────────────────────────────
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: Must run as root. Usage: sudo ./build.sh"
+    exit 1
+fi
+
+MISSING=()
+for cmd in lb debootstrap curl; do
+    command -v "$cmd" &>/dev/null || MISSING+=("$cmd")
+done
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    echo "ERROR: Missing required tools: ${MISSING[*]}"
+    echo ""
+    echo "Install prerequisites:"
+    echo "  Debian/Ubuntu/Kali: sudo apt install git live-build cdebootstrap devscripts"
+    echo ""
+    echo "If not on Kali, you also need the Kali archive keyring:"
+    echo "  curl -fsSL https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg"
+    exit 1
+fi
+
+# ── Kali archive keyring ─────────────────────────────────────────────────────
+KALI_KEYRING="/usr/share/keyrings/kali-archive-keyring.gpg"
+if [ ! -f "$KALI_KEYRING" ]; then
+    step "Installing Kali archive keyring"
+    # Try the package first, fall back to direct download
+    if apt-get install -y kali-archive-keyring 2>/dev/null; then
+        echo "    Installed from package."
+    else
+        curl -fsSL https://archive.kali.org/archive-key.asc \
+            | gpg --dearmor -o "$KALI_KEYRING"
+        echo "    Downloaded and installed."
+    fi
+fi
+
+# ── Prepare build directory ───────────────────────────────────────────────────
+step "Preparing build directory"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+if [ -n "$DO_CLEAN" ]; then
+    step "Cleaning previous build"
+    lb clean --purge 2>/dev/null || true
+    rm -rf config/ .build/
+fi
+
+# ── Assemble includes.chroot from config/ ─────────────────────────────────────
+# Copy our desktop configs into the skel overlay so every new user gets them
+step "Assembling rootfs overlay from config/"
+SKEL="$PROJECT_DIR/kali-config/common/includes.chroot/etc/skel"
+
+# awesome WM
+cp "$PROJECT_DIR/config/awesome/rc.lua"           "$SKEL/.config/awesome/"
+cp "$PROJECT_DIR/config/awesome/theme.lua"         "$SKEL/.config/awesome/"
+
+# Terminal, launcher, compositor
+cp "$PROJECT_DIR/config/alacritty/alacritty.toml"  "$SKEL/.config/alacritty/"
+cp "$PROJECT_DIR/config/rofi/osi.rasi"             "$SKEL/.config/rofi/"
+cp "$PROJECT_DIR/config/picom/picom.conf"          "$SKEL/.config/picom/"
+
+# Shell, editor, multiplexer
+cp "$PROJECT_DIR/config/shell/bash_aliases"        "$SKEL/.bash_aliases"
+cp "$PROJECT_DIR/config/vim/vimrc"                 "$SKEL/.vimrc"
+cp "$PROJECT_DIR/config/tmux/tmux.conf"            "$SKEL/.tmux.conf"
+
+# Wallpaper
+cp "$PROJECT_DIR/wallpaper/osi.png"                "$SKEL/wallpaper/"
+cp "$PROJECT_DIR/wallpaper/osi.png"                "$PROJECT_DIR/kali-config/common/includes.chroot/usr/share/backgrounds/osi/"
+
+# ── lb config ─────────────────────────────────────────────────────────────────
+step "Configuring live-build"
+lb config \
+    --distribution "$DISTRIBUTION" \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --mirror-bootstrap "http://http.kali.org/kali" \
+    --mirror-chroot-security "http://http.kali.org/kali" \
+    --mirror-binary "http://http.kali.org/kali" \
+    --mirror-binary-security "http://http.kali.org/kali" \
+    --debootstrap-options "--keyring=$KALI_KEYRING" \
+    --keyring-packages kali-archive-keyring \
+    --architectures "$ARCH" \
+    --linux-flavours "$ARCH" \
+    --bootappend-live "boot=live components username=osi hostname=osi" \
+    --apt-options "--yes --option Acquire::Retries=5" \
+    --binary-images iso-hybrid \
+    --firmware-binary true \
+    --firmware-chroot true \
+    --image-name "osi-linux" \
+    --iso-application "OSI Linux" \
+    --iso-publisher "OSI Team" \
+    --iso-volume "OSI_LIVE" \
+    --memtest none \
+    --updates true \
+    --security true \
+    $VERBOSE
+
+# ── Copy our variant package list ─────────────────────────────────────────────
+step "Installing package lists and overlays"
+VARIANT_DIR="$PROJECT_DIR/kali-config/variant-$VARIANT"
+if [ ! -d "$VARIANT_DIR" ]; then
+    echo "ERROR: Variant '$VARIANT' not found at $VARIANT_DIR"
+    exit 1
+fi
+
+# Package list
+cp "$VARIANT_DIR/package-lists/"*.list.chroot "$BUILD_DIR/config/package-lists/" 2>/dev/null || true
+
+# Hooks
+cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$BUILD_DIR/config/hooks/live/" 2>/dev/null || true
+
+# Rootfs overlay (configs, skel, sysctl, etc.)
+cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/" 2>/dev/null || true
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+step "Building ISO (this will take 30-90 minutes depending on bandwidth and CPU)"
+lb build 2>&1 | tee "$BUILD_DIR/build.log"
+
+# ── Output ────────────────────────────────────────────────────────────────────
+ISO_FILE=$(ls "$BUILD_DIR"/osi-linux-*.iso 2>/dev/null | head -1)
+if [ -z "$ISO_FILE" ]; then
+    echo "ERROR: Build failed — no ISO found. Check build.log"
+    exit 1
+fi
+
+if [ -n "$OUTPUT_ISO" ]; then
+    mkdir -p "$(dirname "$OUTPUT_ISO")"
+    mv "$ISO_FILE" "$OUTPUT_ISO"
+    ISO_FILE="$OUTPUT_ISO"
+fi
+
+# Fix ownership for the invoking user
+REAL_USER="${SUDO_USER:-$USER}"
+chown "$REAL_USER:$REAL_USER" "$ISO_FILE"
+
+echo ""
+echo "============================================"
+echo "  OSI Linux ISO built successfully!"
+echo "============================================"
+echo ""
+echo "  ISO:    $ISO_FILE"
+echo "  Size:   $(du -sh "$ISO_FILE" | cut -f1)"
+echo "  SHA256: $(sha256sum "$ISO_FILE" | cut -d' ' -f1)"
+echo ""
+echo "  Test in QEMU:"
+echo "    qemu-system-x86_64 -cdrom $ISO_FILE -m 4G -enable-kvm -boot d"
+echo ""
+echo "  Write to USB:"
+echo "    sudo dd if=$ISO_FILE of=/dev/sdX bs=4M status=progress oflag=sync"
+echo ""
+echo "  Create a VM disk:"
+echo "    bash scripts/create-vm.sh $ISO_FILE"
