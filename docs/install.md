@@ -109,7 +109,11 @@ VM_CORES=8 VM_RAM=16G ./launch-vm.sh
 
 ## Step 4: Base System Setup (as root inside the guest)
 
-The setup scripts are already inside the VM at `~/osi-setup`. No file transfer needed.
+The setup scripts are already inside the VM at `~/osi-setup`. No file transfer needed. The directory is a full git clone so you can pull updates at any time:
+
+```sh
+cd ~/osi-setup && git pull
+```
 
 ```sh
 sudo bash ~/osi-setup/scripts/base-setup.sh
