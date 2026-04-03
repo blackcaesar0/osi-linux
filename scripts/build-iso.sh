@@ -147,14 +147,36 @@ if [ -z "$VMLINUZ" ]; then
 fi
 
 # ── Squashfs ──────────────────────────────────────────────────────────────────
-step "Creating squashfs image (xz — this takes a while)"
-mkdir -p "$ISO_STAGE/LiveOS"
-mksquashfs "$ROOTFS" "$ISO_STAGE/LiveOS/squashfs.img" \
-    -comp xz -Xdict-size 100% -noappend \
-    -e "$ROOTFS/proc" \
-    -e "$ROOTFS/sys" \
-    -e "$ROOTFS/dev" \
-    -e "$ROOTFS/tmp"
+# dmsquash-live expects: squashfs.img → LiveOS/rootfs.img (ext4 loop image)
+# We create an ext4 image, copy the rootfs into it, then wrap it in squashfs.
+step "Creating ext4 rootfs image"
+ROOTFS_SIZE=$(du -sm "$ROOTFS" --exclude="$ROOTFS/proc" --exclude="$ROOTFS/sys" \
+    --exclude="$ROOTFS/dev" --exclude="$ROOTFS/tmp" | awk '{print $1}')
+# Add 10% headroom
+ROOTFS_SIZE=$(( ROOTFS_SIZE + ROOTFS_SIZE / 10 ))
+echo "    Rootfs size: ${ROOTFS_SIZE}M (with headroom)"
+
+ROOTFS_IMG="$WORK_DIR/rootfs.img"
+truncate -s "${ROOTFS_SIZE}M" "$ROOTFS_IMG"
+mkfs.ext4 -F -L "LiveOS-rootfs" "$ROOTFS_IMG"
+
+ROOTFS_MNT="$WORK_DIR/rootfs-mnt"
+mkdir -p "$ROOTFS_MNT"
+mount -o loop "$ROOTFS_IMG" "$ROOTFS_MNT"
+
+step "Copying rootfs into ext4 image (this takes a while)"
+rsync -aHAX --info=progress2 \
+    --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/tmp/*' \
+    "$ROOTFS/" "$ROOTFS_MNT/"
+umount "$ROOTFS_MNT"
+
+step "Creating squashfs image (xz compression — this takes a while)"
+SQUASH_SRC="$WORK_DIR/squash-src"
+mkdir -p "$SQUASH_SRC/LiveOS" "$ISO_STAGE/LiveOS"
+mv "$ROOTFS_IMG" "$SQUASH_SRC/LiveOS/rootfs.img"
+mksquashfs "$SQUASH_SRC" "$ISO_STAGE/LiveOS/squashfs.img" \
+    -comp xz -Xdict-size 100% -noappend
+rm -rf "$SQUASH_SRC"
 
 # ── ISO boot structure ────────────────────────────────────────────────────────
 step "Assembling ISO boot structure"
