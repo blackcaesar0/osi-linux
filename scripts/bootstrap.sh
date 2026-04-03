@@ -16,7 +16,7 @@ MNT="/mnt/voidroot"
 REPO="${REPO:-https://repo-default.voidlinux.org/current}"
 XBPS_DIR="$REAL_HOME/VM/bootstrap"
 XBPS_STATIC="$XBPS_DIR/usr/bin/xbps-install.static"
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 
