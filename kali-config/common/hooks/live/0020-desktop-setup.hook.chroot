@@ -1,0 +1,102 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — Desktop and user configuration hook
+# Runs inside the chroot during ISO build.
+# Sets up awesome WM as default, configures the live user, and creates the
+# default session.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Configuring desktop environment..."
+
+# ── Create default .xinitrc in /etc/skel ──────────────────────────────────────
+cat > /etc/skel/.xinitrc << 'EOF'
+#!/bin/sh
+export XDG_SESSION_TYPE=x11
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+mkdir -p "$XDG_RUNTIME_DIR"
+exec dbus-launch --exit-with-session awesome
+EOF
+chmod +x /etc/skel/.xinitrc
+
+# ── Create awesome X session entry ────────────────────────────────────────────
+mkdir -p /usr/share/xsessions
+cat > /usr/share/xsessions/awesome.desktop << 'EOF'
+[Desktop Entry]
+Name=awesome
+Comment=OSI Linux — awesome window manager
+Exec=awesome
+TryExec=awesome
+Type=Application
+Keywords=tiling;wm;windowmanager;
+EOF
+
+# ── Bash prompt in /etc/skel/.bashrc ──────────────────────────────────────────
+cat >> /etc/skel/.bashrc << 'BASHEOF'
+
+# OSI prompt — cyan accent, shows IP of primary outbound interface
+_osi_ip() {
+    ip route get 1.1.1.1 2>/dev/null | awk '/src/{print $7; exit}'
+}
+PS1='\[\033[36;1m\]\u\[\033[0m\]@\[\033[35m\]\h\[\033[0m\] \[\033[34m\]\w\[\033[0m\]$( _ip=$(_osi_ip); [ -n "$_ip" ] && printf " \[\033[36m\][%s]\[\033[0m\]" "$_ip" ) \[\033[36;1m\]>\[\033[0m\] '
+
+# Load aliases
+if [ -f ~/.bash_aliases ]; then
+    . ~/.bash_aliases
+fi
+
+# Go workspace
+export GOPATH="$HOME/go"
+export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
+BASHEOF
+
+# ── GTK dark theme ────────────────────────────────────────────────────────────
+mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
+cat > /etc/skel/.config/gtk-3.0/settings.ini << 'EOF'
+[Settings]
+gtk-icon-theme-name=Papirus-Dark
+gtk-theme-name=Adwaita-dark
+gtk-font-name=Hack 10
+EOF
+cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
+
+# ── Tools directory structure ─────────────────────────────────────────────────
+mkdir -p /etc/skel/tools/{recon,exploitation,post-exploitation,web,network,forensics,custom,wordlists}
+mkdir -p /etc/skel/go/{bin,pkg,src}
+mkdir -p /etc/skel/screenshots
+mkdir -p /etc/skel/.local/bin
+
+# ── Workspace README stubs ────────────────────────────────────────────────────
+for dir in recon exploitation post-exploitation web network forensics custom wordlists; do
+    printf '# %s\n\nDrop tools, scripts, and notes here.\n' "$dir" > "/etc/skel/tools/$dir/README.md"
+done
+
+# ── Configure the live user (osi) ─────────────────────────────────────────────
+# The live user is created by live-build via boot params (username=osi).
+# This hook ensures the user exists for config purposes during build.
+if ! id osi &>/dev/null; then
+    useradd -m -G sudo,audio,video,cdrom,plugdev,netdev,bluetooth,wireshark \
+        -s /bin/bash osi 2>/dev/null || true
+fi
+
+# Passwordless sudo for osi
+echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
+chmod 0440 /etc/sudoers.d/99-osi-nopasswd
+
+# Set default password (osi:osi — user should change after install)
+echo "osi:osi" | chpasswd 2>/dev/null || true
+echo "root:toor" | chpasswd 2>/dev/null || true
+
+# ── LightDM / display manager ────────────────────────────────────────────────
+# If lightdm is present, configure it for awesome
+if [ -d /etc/lightdm ]; then
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat > /etc/lightdm/lightdm.conf.d/50-osi.conf << 'EOF'
+[Seat:*]
+autologin-user=osi
+autologin-session=awesome
+user-session=awesome
+EOF
+fi
+
+echo "[OSI] Desktop configuration complete."

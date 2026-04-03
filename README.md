@@ -1,142 +1,159 @@
 # OSI Linux
 
-A custom Void Linux distribution built from scratch for penetration testing and daily use inside QEMU/KVM. No systemd — runit only. Minimal tiling desktop (awesome WM) with full SPICE integration for clipboard sharing and auto-resize. Designed to be built by anyone, on any host.
+A custom Kali-based distribution built for penetration testing and offensive security operations. Runs as a QEMU/KVM virtual machine with full SPICE integration, or boots from USB.
+
+Leaner than stock Kali — awesome WM tiling desktop, curated tool selection, cyberpunk dark theme, QEMU/KVM optimized out of the box.
 
 ---
 
 ## Features
 
-- Void Linux (glibc, rolling release, runit init)
-- awesome WM with OSI black/white branding and named workspaces
-- SPICE + QEMU guest agent for clipboard, drag-and-drop, and display auto-resize
-- X11 session with picom compositor, alacritty terminal, rofi launcher
-- Multi-version Python (3.9–3.12) via pyenv, system Ruby 3.3, pipx for isolated CLI tools
-- Go workspace, Node.js, OpenJDK 17, Perl pre-installed
-- Complete build toolchain and 30+ development headers for compiling any pentest tool from source
-- Essential network tools: nmap, masscan, tcpdump, tshark, socat, ncat, wireshark, bind-tools
-- Binary analysis: strace, ltrace, gdb, lsof, binutils
-- ranger file manager, mousepad editor, zathura PDF viewer, slock screen lock
-- tmux config (Ctrl+a prefix, vi keys, OSI status bar), vim config (no plugins), bash aliases
-- Organised `~/tools/` directory tree with workspace README stubs
-- openntpd time sync, tuned sysctl (scanner-friendly socket buffers, high inotify limits)
-- Passwordless sudo for the default user (standard for pentest VMs)
-- Audio passthrough via SPICE
-- ISO build script producing a USB-dd-able hybrid live image
-
----
-
-## Host Requirements
-
-| Tool | Purpose |
-|------|---------|
-| `qemu-kvm` / `qemu-system-x86_64` | VM execution |
-| `qemu-img` | Create and manage qcow2 disk images |
-| `grub-mkstandalone` | Build standalone UEFI boot binary |
-| `parted` | GPT partitioning |
-| `mkfs.fat`, `mkfs.ext4` | Format partitions |
-| `curl` | Download static xbps |
-| `blkid`, `udevadm` | Device detection |
-| `spicy` or `virt-viewer` | SPICE client (to connect to the VM display) |
-
-Install on Debian/Ubuntu: `sudo apt install qemu-kvm qemu-utils parted dosfstools e2fsprogs curl util-linux grub-efi-amd64-bin virt-viewer`
-
-Install on Arch: `sudo pacman -S qemu-full parted dosfstools e2fsprogs curl edk2-ovmf virt-viewer`
-
-Install on Fedora: `sudo dnf install qemu-kvm qemu-img parted dosfstools e2fsprogs curl grub2-efi-x64 virt-viewer`
+- **Kali rolling base** — access to Kali's entire tool repository via `apt`
+- **awesome WM** — fast tiling desktop with 9 named workspaces, no XFCE/GNOME bloat
+- **Cyberpunk theme** — dark base with cyan accents across all apps (alacritty, rofi, tmux, vim)
+- **SPICE + QEMU guest agent** — clipboard sharing, display auto-resize, USB redirection
+- **Curated tools** — metasploit, nmap, burpsuite, bloodhound, impacket, hashcat, ghidra, and more
+- **Development ready** — Python 3, Ruby, Go, Node.js, Java, full build toolchain
+- **picom compositor** — blur, shadows, rounded corners, smooth fading
+- **Live ISO** — boot from USB or run in QEMU, install to disk when ready
+- **Everything pre-configured** — no post-install scripts to run, it just works
 
 ---
 
 ## Quick Start
 
+### Option 1: Build the ISO
+
+Requires a Debian, Ubuntu, or Kali host.
+
 ```sh
-git clone <repo> osi-linux
+git clone https://github.com/blackcaesar0/osi-linux
 cd osi-linux
 
-# 1. Create disk and bootstrap Void Linux onto it (host, as root)
-sudo bash scripts/bootstrap.sh
+# Install prerequisites
+sudo apt install git live-build cdebootstrap devscripts
 
-# 2. Start the VM
+# Build the ISO
+sudo ./build.sh
+```
+
+Build takes 30–90 minutes. The ISO lands in `build/`.
+
+### Option 2: Run in QEMU/KVM
+
+```sh
+# Create a VM disk and boot the ISO installer
+bash scripts/create-vm.sh build/osi-linux-*.iso
+
+# After installing, boot normally
 ./launch-vm.sh
-
-# Connect to the VM display with: spicy -h localhost -p 5900
 ```
 
-Inside the VM, log in as root and run the setup scripts in order:
+Connect to the VM: `spicy -h 127.0.0.1 -p 5900`
+
+### Option 3: Write to USB
 
 ```sh
-# Copy the project into the VM first (scp from host):
-# scp -P 2222 -r osi-linux/ youruser@localhost:~/osi-setup/
-
-# Then as root inside the guest:
-bash ~/osi-setup/scripts/base-setup.sh
-bash ~/osi-setup/scripts/desktop-setup.sh
-
-# Then as your desktop user (NOT root):
-bash ~/osi-setup/scripts/deploy-configs.sh
-
-sudo reboot
+sudo dd if=build/osi-linux-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-See [docs/install.md](docs/install.md) for the full step-by-step walkthrough.
+---
+
+## Default Credentials
+
+| User | Password | Notes |
+|------|----------|-------|
+| `osi` | `osi` | Desktop user with passwordless sudo |
+| `root` | `toor` | Root account |
+
+**Change these after first login:** `passwd`
 
 ---
 
-## Setup Script Order
+## Desktop Keybindings
 
-| Script | Run as | Where | What it does |
-|--------|--------|-------|--------------|
-| `scripts/bootstrap.sh` | root | host | Partition disk, bootstrap Void, install GRUB |
-| `scripts/base-setup.sh` | root | guest | Packages, build tools, runtimes, pentest tools |
-| `scripts/desktop-setup.sh` | root | guest | Xorg, awesome WM, desktop apps, display manager |
-| `scripts/deploy-configs.sh` | user | guest | Configs, shell env, version managers, icon theme |
-| ↳ `scripts/sysconfig.sh` | root | guest | sysctl, sudoers, openntpd, resource limits |
-| ↳ `scripts/version-managers.sh` | user | guest | pyenv, Python 3.9–3.12, system Ruby, pipx |
-| ↳ `scripts/shell-env.sh` | user | guest | bash_aliases, vimrc, tmux.conf, prompt |
-| ↳ `scripts/setup-icons.sh` | user | guest | Custom OSI icon theme |
+Mod key = Super (Win).
 
----
+| Key | Action |
+|-----|--------|
+| `Mod+Return` | Terminal (alacritty) |
+| `Mod+d` | App launcher (rofi) |
+| `Mod+e` | File manager (ranger) |
+| `Mod+1-9` | Switch workspace |
+| `Mod+Shift+c` | Close window |
+| `Mod+f` | Fullscreen |
+| `Mod+s` | Show all keybindings |
+| `Mod+Ctrl+l` | Lock screen |
+| `Print` | Screenshot |
+| `Shift+Print` | Screenshot (select region) |
 
-## Configuration Variables
-
-`bootstrap.sh` prompts for username and passwords interactively. The following can also be set via environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DISK_IMAGE` | `~/VM/osi-linux.qcow2` | Path for the qcow2 disk image |
-| `DISK_SIZE` | `80G` | Disk image size |
-| `VM_HOSTNAME` | `osi` | Guest hostname |
-
-Example: `sudo DISK_SIZE=120G bash scripts/bootstrap.sh`
+See [docs/keybindings.md](docs/keybindings.md) for the complete reference.
 
 ---
 
-## Building an ISO
-
-```sh
-sudo bash scripts/build-iso.sh [output.iso]
-```
-
-See [docs/build-iso.md](docs/build-iso.md) for prerequisites and full details.
-
----
-
-## Directory Layout
+## Project Structure
 
 ```
 osi-linux/
-├── config/
-│   ├── alacritty/      terminal emulator config
-│   ├── awesome/        rc.lua + theme.lua
-│   ├── emptty/         display manager config
-│   ├── picom/          compositor config
-│   ├── rofi/           launcher theme
-│   ├── runit/          spice-vdagent + qemu-guest-agent services
-│   ├── shell/          bash_aliases
-│   ├── tmux/           tmux.conf
-│   └── vim/            vimrc
-├── docs/               install, ISO build, post-install, keybindings
-├── scripts/            bootstrap, setup, deploy, build-iso
-├── wallpaper/          osi.png (wolf logo)
-├── launch-vm.sh        QEMU launch command
-└── README.md
+├── build.sh                 Build script (wraps Kali live-build)
+├── launch-vm.sh             QEMU/KVM launcher
+├── config/                  Desktop configs (awesome, alacritty, rofi, picom, tmux, vim)
+├── kali-config/
+│   ├── variant-osi/
+│   │   └── package-lists/   Curated package selection
+│   └── common/
+│       ├── hooks/live/      Build-time config hooks
+│       ├── includes.chroot/ Files overlaid into the rootfs
+│       └── includes.binary/ Files on the ISO media
+├── scripts/
+│   ├── create-vm.sh         Create qcow2 disk + boot installer
+│   └── cleanup-host.sh      Remove build artifacts
+├── wallpaper/               OSI wolf logo
+└── docs/
 ```
+
+---
+
+## Customizing
+
+### Add/remove packages
+
+Edit `kali-config/variant-osi/package-lists/osi.list.chroot` — one package per line.
+
+### Change desktop configs
+
+Edit files in `config/` — they're copied into `/etc/skel` during build so every user gets them.
+
+### Add build-time configuration
+
+Add hook scripts in `kali-config/common/hooks/live/` — they run inside the chroot during ISO build. Name them with number prefixes for ordering (e.g., `0040-my-hook.hook.chroot`).
+
+### Add files to the rootfs
+
+Place files in `kali-config/common/includes.chroot/` — they're overlaid directly onto the filesystem. For example, `includes.chroot/etc/foo.conf` becomes `/etc/foo.conf` in the ISO.
+
+---
+
+## QEMU/KVM Details
+
+The VM runs with:
+- KVM acceleration, q35 machine type
+- 8 GB RAM, 4 cores / 2 threads
+- UEFI boot (OVMF)
+- virtio-scsi disk, virtio-net networking
+- SPICE display with clipboard + USB redirect
+- Audio via SPICE (intel-hda)
+- SSH forwarded on host port 2222
+
+---
+
+## Why OSI over stock Kali?
+
+| | Stock Kali | OSI Linux |
+|---|---|---|
+| Desktop | XFCE (heavy) | awesome WM (fast, tiling) |
+| Tools | 600+ (bloated) | Curated essentials |
+| ISO size | ~4 GB | ~2-3 GB |
+| VM integration | Basic | Full SPICE + guest agent |
+| Theme | Kali blue | Cyberpunk dark + cyan |
+| Post-install | Manual config | Pre-configured |

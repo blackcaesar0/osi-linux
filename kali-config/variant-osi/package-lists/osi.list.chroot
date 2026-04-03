@@ -1,0 +1,212 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — Package List
+# Curated selection: stable, fast, QEMU/KVM optimized.
+# Based on Kali but leaner — no bloat, only what matters.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Kali core ─────────────────────────────────────────────────────────────────
+kali-linux-core
+kali-defaults
+kali-archive-keyring
+
+# ── Desktop: awesome WM stack (no XFCE/GNOME) ────────────────────────────────
+xorg
+awesome
+alacritty
+rofi
+picom
+feh
+slock
+scrot
+flameshot
+papirus-icon-theme
+fonts-hack
+fonts-noto
+fonts-noto-color-emoji
+lxappearance
+dunst
+xclip
+xdotool
+xterm
+dbus-x11
+
+# ── File manager and editors ──────────────────────────────────────────────────
+thunar
+thunar-archive-plugin
+mousepad
+ranger
+
+# ── Web browser ───────────────────────────────────────────────────────────────
+firefox-esr
+
+# ── Terminal tools ────────────────────────────────────────────────────────────
+tmux
+vim
+nano
+htop
+btop
+tree
+file
+jq
+bat
+ripgrep
+fd-find
+fzf
+
+# ── Network Manager ──────────────────────────────────────────────────────────
+network-manager
+network-manager-gnome
+
+# ── QEMU/KVM guest integration ───────────────────────────────────────────────
+spice-vdagent
+qemu-guest-agent
+xserver-xorg-video-qxl
+
+# ── Development ───────────────────────────────────────────────────────────────
+git
+git-lfs
+build-essential
+gcc
+g++
+make
+cmake
+python3
+python3-pip
+python3-venv
+python3-dev
+pipx
+ruby
+ruby-dev
+golang
+default-jdk
+nodejs
+npm
+curl
+wget
+
+# ── Development headers (for compiling tools from source) ─────────────────────
+libssl-dev
+libffi-dev
+zlib1g-dev
+libbz2-dev
+libreadline-dev
+libsqlite3-dev
+liblzma-dev
+libncurses-dev
+libpcap-dev
+libnet1-dev
+libyaml-dev
+libxml2-dev
+libxslt1-dev
+libpq-dev
+libkrb5-dev
+libssh2-1-dev
+
+# ── Pentest: Reconnaissance ──────────────────────────────────────────────────
+nmap
+masscan
+netdiscover
+dnsenum
+dnsrecon
+fierce
+recon-ng
+theharvester
+maltego
+sublist3r
+amass
+whatweb
+
+# ── Pentest: Web Application ─────────────────────────────────────────────────
+burpsuite
+sqlmap
+nikto
+wpscan
+dirb
+gobuster
+ffuf
+zaproxy
+
+# ── Pentest: Password Attacks ────────────────────────────────────────────────
+john
+hashcat
+hydra
+medusa
+cewl
+crunch
+seclists
+wordlists
+
+# ── Pentest: Exploitation ────────────────────────────────────────────────────
+metasploit-framework
+exploitdb
+searchsploit
+
+# ── Pentest: Wireless (useful even in VMs for USB passthrough) ────────────────
+aircrack-ng
+
+# ── Pentest: Sniffing & Spoofing ─────────────────────────────────────────────
+wireshark
+tcpdump
+responder
+ettercap-text-only
+bettercap
+
+# ── Pentest: Post-Exploitation ───────────────────────────────────────────────
+impacket-scripts
+evil-winrm
+crackmapexec
+bloodhound
+neo4j
+mimikatz
+powershell
+chisel
+ligolo-ng
+proxychains4
+sshuttle
+
+# ── Pentest: Reverse Engineering ──────────────────────────────────────────────
+ghidra
+gdb
+gdb-peda
+radare2
+binwalk
+foremost
+volatility3
+
+# ── Networking & Infrastructure ───────────────────────────────────────────────
+openssh-client
+openssh-server
+socat
+netcat-openbsd
+net-tools
+iproute2
+dnsutils
+whois
+traceroute
+openvpn
+wireguard-tools
+
+# ── System tools ──────────────────────────────────────────────────────────────
+sudo
+strace
+ltrace
+lsof
+pciutils
+usbutils
+sysstat
+p7zip-full
+unzip
+zip
+rsync
+ntpdate
+ca-certificates
+
+# ── PDF viewer ────────────────────────────────────────────────────────────────
+zathura
+
+# ── Containers ────────────────────────────────────────────────────────────────
+docker.io
+docker-compose
+
+# ── ImageMagick (for icon theme generation) ───────────────────────────────────
+imagemagick

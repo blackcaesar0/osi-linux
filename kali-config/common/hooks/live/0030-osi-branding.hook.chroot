@@ -1,0 +1,67 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — Branding and cleanup hook
+# Runs inside the chroot during ISO build.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Applying branding..."
+
+# ── OS release branding ───────────────────────────────────────────────────────
+cat > /etc/os-release << 'EOF'
+PRETTY_NAME="OSI Linux"
+NAME="OSI Linux"
+ID=osi
+ID_LIKE="kali debian"
+VERSION="rolling"
+VERSION_ID="rolling"
+HOME_URL="https://github.com/blackcaesar0/osi-linux"
+SUPPORT_URL="https://github.com/blackcaesar0/osi-linux/issues"
+BUG_REPORT_URL="https://github.com/blackcaesar0/osi-linux/issues"
+EOF
+
+# ── /etc/issue (login banner) ─────────────────────────────────────────────────
+cat > /etc/issue << 'EOF'
+
+  ╔═══════════════════════════════╗
+  ║         OSI  Linux            ║
+  ║    Offensive Security Intel   ║
+  ╚═══════════════════════════════╝
+
+EOF
+
+cat > /etc/issue.net << 'EOF'
+OSI Linux — Offensive Security Intel
+EOF
+
+# ── MOTD ──────────────────────────────────────────────────────────────────────
+cat > /etc/motd << 'EOF'
+
+  ┌─────────────────────────────────────┐
+  │           OSI Linux                 │
+  │     Offensive Security Intel        │
+  │                                     │
+  │  Default creds:  osi / osi          │
+  │  Change them:    passwd             │
+  │                                     │
+  │  Keybindings:    Win+s              │
+  │  Terminal:       Win+Return         │
+  │  Launcher:       Win+d              │
+  └─────────────────────────────────────┘
+
+EOF
+
+# ── Set wallpaper as default background ───────────────────────────────────────
+if [ -f /usr/share/backgrounds/osi/osi.png ]; then
+    # Link as default background for display managers
+    mkdir -p /usr/share/backgrounds
+    ln -sf /usr/share/backgrounds/osi/osi.png /usr/share/backgrounds/default.png 2>/dev/null || true
+fi
+
+# ── Cleanup ───────────────────────────────────────────────────────────────────
+echo "[OSI] Cleaning up..."
+apt-get clean
+rm -rf /var/cache/apt/archives/*.deb
+rm -rf /tmp/*
+
+echo "[OSI] Branding complete."

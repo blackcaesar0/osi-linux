@@ -1,30 +1,36 @@
-# Building an ISO
+# Building the OSI Linux ISO
 
-`scripts/build-iso.sh` produces a hybrid bootable ISO from the same source tree used for the VM install. The ISO boots from USB or optical media and runs a live session directly from RAM.
+## How It Works
+
+OSI Linux uses [Kali's live-build](https://www.kali.org/docs/development/live-build-a-custom-kali-iso/) infrastructure to produce a bootable hybrid ISO. The `build.sh` script:
+
+1. Installs the Kali archive keyring if missing
+2. Runs `lb config` with Kali rolling repos
+3. Copies our package list, hooks, and rootfs overlay into the build tree
+4. Runs `lb build` to produce the ISO
+
+The result is a standard Debian/Kali live ISO that:
+- Boots into a live session (all tools available, changes lost on reboot)
+- Can install to disk via the Kali installer
+- Works on bare metal, QEMU/KVM, VirtualBox, VMware
 
 ---
 
-## Host Prerequisites
+## Prerequisites
 
-In addition to the bootstrap prerequisites, you need:
+**Host:** Debian 12+, Ubuntu 22.04+, or Kali Linux.
 
-| Tool | Package (Debian/Ubuntu) |
-|------|------------------------|
-| `mksquashfs` | `squashfs-tools` |
-| `xorriso` | `xorriso` |
-| `grub-mkrescue` | `grub2-common` or `grub-common` |
-| `dracut` | `dracut` |
-
-Install:
 ```sh
-# Debian/Ubuntu
-sudo apt install squashfs-tools xorriso grub2-common dracut
+sudo apt install git live-build cdebootstrap devscripts
+```
 
-# Arch
-sudo pacman -S squashfs-tools xorriso grub dracut
+**Disk space:** ~30 GB free (build chroot + squashfs + ISO).
 
-# Fedora
-sudo dnf install squashfs-tools xorriso grub2-tools dracut
+**Kali keyring:** If not on Kali, the build script installs it automatically. Manual install:
+
+```sh
+curl -fsSL https://archive.kali.org/archive-key.asc \
+    | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg
 ```
 
 ---
@@ -32,96 +38,94 @@ sudo dnf install squashfs-tools xorriso grub2-tools dracut
 ## Building
 
 ```sh
-sudo bash scripts/build-iso.sh
-# or with a custom output path:
-sudo bash scripts/build-iso.sh ~/releases/osi-linux-custom.iso
+sudo ./build.sh
 ```
 
-The output ISO is placed at `~/VM/osi-linux-YYYYMMDD.iso` by default and is owned by your real user.
+Build time: **30–90 minutes** (mostly downloading packages).
 
-Build time: 30–60 minutes depending on download speed and CPU.
-
-### Environment variable overrides
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `REPO` | Void default mirror | Void Linux package mirror URL |
-| `WORK_DIR` | `/tmp/osi-iso-work` | Scratch space for the build |
-
-Example:
-```sh
-sudo REPO=https://mirrors.dotsrc.org/voidlinux/current bash scripts/build-iso.sh
-```
-
----
-
-## What the Script Does
-
-1. Downloads static xbps (same as bootstrap.sh)
-2. Creates a clean rootfs and bootstraps Void Linux base into it
-3. Runs `base-setup.sh` and `desktop-setup.sh` inside a chroot
-4. Installs `dracut` and `dracut-live`, then builds a live-boot initramfs using the `dmsquash-live` module
-5. Packs the rootfs into a compressed squashfs image
-6. Assembles the ISO directory structure with GRUB boot config
-7. Calls `grub-mkrescue` to produce a hybrid EFI+BIOS ISO
-8. Prints the SHA256 checksum of the output
-
----
-
-## Requirement: dmsquash-live
-
-The `dmsquash-live` dracut module is **required** for live ISO boot. The build script attempts to install `dracut-live` automatically inside the chroot, then checks for the module. If it is still missing, the build **errors out** rather than producing an unbootable ISO.
-
-If you hit this error:
-
-**Option A — Use void-mklive (recommended)**
-
-The Void Linux project provides `void-mklive`, a set of scripts specifically designed for building Void live images. It handles the initramfs internally without relying on dmsquash-live.
+### Options
 
 ```sh
-git clone https://github.com/void-linux/void-mklive
-cd void-mklive
-# See its README for usage — point it at a custom package list
+sudo ./build.sh --verbose           # show all output
+sudo ./build.sh --clean             # remove previous build first
+sudo ./build.sh --output ~/my.iso   # custom output path
 ```
 
-**Option B — Manual initramfs**
+### Rebuilding
 
-Write a minimal `init` script that mounts the squashfs and overlays a tmpfs, then pack it with `cpio`. This is what void-mklive does internally.
+After changing configs or packages:
+
+```sh
+sudo ./build.sh --clean
+```
+
+The `--clean` flag runs `lb clean --purge` before building.
 
 ---
 
-## Testing the ISO
+## Customization
 
-Before writing to USB, test with QEMU:
+### Packages
+
+Edit `kali-config/variant-osi/package-lists/osi.list.chroot`. One package per line. Lines starting with `#` are comments.
+
+### Desktop configs
+
+Edit files in `config/` — they're copied into `/etc/skel` so every user gets them automatically:
+
+| Config file | Destination in ISO |
+|---|---|
+| `config/awesome/rc.lua` | `/etc/skel/.config/awesome/rc.lua` |
+| `config/alacritty/alacritty.toml` | `/etc/skel/.config/alacritty/alacritty.toml` |
+| `config/rofi/osi.rasi` | `/etc/skel/.config/rofi/osi.rasi` |
+| `config/picom/picom.conf` | `/etc/skel/.config/picom/picom.conf` |
+| `config/tmux/tmux.conf` | `/etc/skel/.tmux.conf` |
+| `config/vim/vimrc` | `/etc/skel/.vimrc` |
+| `config/shell/bash_aliases` | `/etc/skel/.bash_aliases` |
+
+### Build hooks
+
+Add scripts to `kali-config/common/hooks/live/`. They run inside the chroot during build. Name them with number prefixes for ordering:
+
+- `0010-system-config.hook.chroot` — system-level config
+- `0020-desktop-setup.hook.chroot` — desktop and user setup
+- `0030-osi-branding.hook.chroot` — branding and cleanup
+
+### Rootfs overlay
+
+Files in `kali-config/common/includes.chroot/` are copied directly into the filesystem. For example:
+
+```
+kali-config/common/includes.chroot/etc/motd  →  /etc/motd in the ISO
+```
+
+---
+
+## Testing
+
+Test the ISO in QEMU before writing to USB:
 
 ```sh
 qemu-system-x86_64 \
-    -cdrom ~/VM/osi-linux-$(date +%Y%m%d).iso \
+    -cdrom build/osi-linux-*.iso \
     -m 4G \
     -enable-kvm \
     -boot d \
-    -vga qxl
+    -device virtio-vga
 ```
 
 ---
 
-## Writing to USB
+## Cleanup
 
-Find your USB device with `lsblk`, then:
+Remove build artifacts (can be 20+ GB):
 
 ```sh
-sudo dd if=~/VM/osi-linux-YYYYMMDD.iso of=/dev/sdX bs=4M status=progress oflag=sync
+bash scripts/cleanup-host.sh
 ```
 
-Replace `/dev/sdX` with your actual USB device. This overwrites everything on the device.
+Or manually:
 
-Verify the write: `sha256sum /dev/sdX` and compare against the checksum printed at the end of the build.
-
----
-
-## Customising the ISO
-
-- To change what packages are installed: edit `scripts/base-setup.sh` and `scripts/desktop-setup.sh` before running the ISO build
-- To change the live session user: the rootfs will contain the `osi` user with the default password set during bootstrap — the ISO does not run bootstrap interactively, so the live user uses whatever password is baked in via `chpasswd` in `base-setup.sh`
-- To add files to the ISO root: place them in the `iso/` directory before the `grub-mkrescue` step
-- The GRUB config is written inline in `build-iso.sh` — edit it there to change boot options or add menu entries
+```sh
+sudo rm -rf build/
+```

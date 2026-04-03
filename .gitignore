@@ -1,0 +1,12 @@
+# live-build workspace
+build/
+
+# Editor files
+*.swp
+*.swo
+*~
+.*.un~
+
+# OS files
+.DS_Store
+Thumbs.db

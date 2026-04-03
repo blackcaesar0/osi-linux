@@ -19,7 +19,10 @@ find_ovmf_code() {
         /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
         /usr/share/edk2/ovmf/OVMF_CODE.fd \
         /usr/share/qemu/OVMF.fd \
-        /usr/share/OVMF/x64/OVMF_CODE.fd; do
+        /usr/share/OVMF/x64/OVMF_CODE.fd \
+        /usr/share/edk2/x64/OVMF_CODE.fd \
+        /usr/share/qemu/edk2-x86_64-code.fd \
+        /run/libvirt/nix-ovmf/OVMF_CODE.fd; do
         [ -f "$p" ] && { echo "$p"; return; }
     done
 }
@@ -30,7 +33,10 @@ find_ovmf_vars() {
         /usr/share/OVMF/OVMF_VARS_4M.fd \
         /usr/share/edk2-ovmf/x64/OVMF_VARS.fd \
         /usr/share/edk2/ovmf/OVMF_VARS.fd \
-        /usr/share/OVMF/x64/OVMF_VARS.fd; do
+        /usr/share/OVMF/x64/OVMF_VARS.fd \
+        /usr/share/edk2/x64/OVMF_VARS.fd \
+        /usr/share/qemu/edk2-x86_64-vars.fd \
+        /run/libvirt/nix-ovmf/OVMF_VARS.fd; do
         [ -f "$p" ] && { echo "$p"; return; }
     done
 }
@@ -47,7 +53,7 @@ if [ -z "$OVMF_CODE" ]; then
     exit 1
 fi
 
-[ -f "$DISK" ] || { echo "ERROR: Disk not found: $DISK"; echo "Run: sudo bash scripts/bootstrap.sh"; exit 1; }
+[ -f "$DISK" ] || { echo "ERROR: Disk not found: $DISK"; echo "Run: bash scripts/create-vm.sh <iso>"; exit 1; }
 
 # Per-VM EFI vars file — writable, persists boot entries between reboots
 if [ ! -f "$VARS" ]; then
