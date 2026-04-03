@@ -64,11 +64,11 @@ cp "$BASE/wallpaper/osi.png"                ~/wallpaper/
 # ── Runit service scripts ────────────────────────────────────────────────────
 step "Deploying runit service scripts"
 sudo cp -r "$BASE/config/runit/spice-vdagent"    /etc/sv/ 2>/dev/null || true
-sudo cp -r "$BASE/config/runit/qemu-guest-agent"  /etc/sv/ 2>/dev/null || true
+sudo cp -r "$BASE/config/runit/qemu-ga"  /etc/sv/ 2>/dev/null || true
 sudo chmod +x /etc/sv/spice-vdagent/run    2>/dev/null || true
-sudo chmod +x /etc/sv/qemu-guest-agent/run 2>/dev/null || true
+sudo chmod +x /etc/sv/qemu-ga/run 2>/dev/null || true
 sudo ln -sf /etc/sv/spice-vdagent    /var/service/ 2>/dev/null || true
-sudo ln -sf /etc/sv/qemu-guest-agent /var/service/ 2>/dev/null || true
+sudo ln -sf /etc/sv/qemu-ga /var/service/ 2>/dev/null || true
 
 # ── System configuration (kernel params, sudoers, ntp, limits) ────────────────
 step "Applying system configuration"
