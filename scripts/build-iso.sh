@@ -63,6 +63,17 @@ step "Creating fresh rootfs at $ROOTFS"
 rm -rf "$ROOTFS" "$ISO_STAGE"
 mkdir -p "$ROOTFS" "$ISO_STAGE"
 
+# Pre-seed xbps signing keys from the bootstrap cache so xbps-install does not
+# prompt for interactive key import confirmation (breaks non-TTY/background runs)
+if [ -d "$XBPS_DIR/var/db/xbps/keys" ]; then
+    mkdir -p "$ROOTFS/var/db/xbps/keys"
+    cp "$XBPS_DIR/var/db/xbps/keys/"* "$ROOTFS/var/db/xbps/keys/"
+    echo "    Seeded xbps keys from $XBPS_DIR"
+else
+    echo "WARNING: No cached xbps keys found — xbps-install may prompt interactively."
+    echo "         Run sudo bash scripts/bootstrap.sh first to populate the key cache."
+fi
+
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 step "Bootstrapping Void Linux base system (takes several minutes)"
 XBPS_ARCH=x86_64 "$XBPS_STATIC" -S -r "$ROOTFS" -R "$REPO" -y base-system
