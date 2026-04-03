@@ -99,11 +99,19 @@ set -euo pipefail
 if ! id osi &>/dev/null; then
     useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash osi
 fi
-echo "osi:osi" | chpasswd
-echo "root:root" | chpasswd
 echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
 chmod 0440 /etc/sudoers.d/99-osi-nopasswd
 LIVEUSER
+
+# Set passwords outside the chroot heredoc using openssl — chpasswd can fail
+# silently if PAM/libcrypt isn't fully configured in the chroot
+OSI_HASH=$(openssl passwd -6 "osi")
+ROOT_HASH=$(openssl passwd -6 "root")
+[ -n "$OSI_HASH" ]  || { echo "ERROR: openssl failed to generate osi password hash"; exit 1; }
+[ -n "$ROOT_HASH" ] || { echo "ERROR: openssl failed to generate root password hash"; exit 1; }
+chroot "$ROOTFS" usermod -p "$OSI_HASH" osi   || { echo "ERROR: failed to set osi password"; exit 1; }
+chroot "$ROOTFS" usermod -p "$ROOT_HASH" root  || { echo "ERROR: failed to set root password"; exit 1; }
+echo "    Live user: osi/osi  Root: root/root"
 
 # ── Live boot initramfs ───────────────────────────────────────────────────────
 step "Building live initramfs"
