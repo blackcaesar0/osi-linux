@@ -99,11 +99,19 @@ set -euo pipefail
 if ! id osi &>/dev/null; then
     useradd -m -G wheel,audio,video,cdrom,input,network -s /bin/bash osi
 fi
-echo "osi:osi" | chpasswd
-echo "root:root" | chpasswd
 echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
 chmod 0440 /etc/sudoers.d/99-osi-nopasswd
 LIVEUSER
+
+# Set passwords outside the chroot heredoc using openssl — chpasswd can fail
+# silently if PAM/libcrypt isn't fully configured in the chroot
+OSI_HASH=$(openssl passwd -6 "osi")
+ROOT_HASH=$(openssl passwd -6 "root")
+[ -n "$OSI_HASH" ]  || { echo "ERROR: openssl failed to generate osi password hash"; exit 1; }
+[ -n "$ROOT_HASH" ] || { echo "ERROR: openssl failed to generate root password hash"; exit 1; }
+chroot "$ROOTFS" usermod -p "$OSI_HASH" osi   || { echo "ERROR: failed to set osi password"; exit 1; }
+chroot "$ROOTFS" usermod -p "$ROOT_HASH" root  || { echo "ERROR: failed to set root password"; exit 1; }
+echo "    Live user: osi/osi  Root: root/root"
 
 # ── Live boot initramfs ───────────────────────────────────────────────────────
 step "Building live initramfs"
@@ -127,8 +135,12 @@ if ! dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
 fi
 
 step "Building dracut live initramfs using host dracut"
+# Exclude systemd modules — the host (Ubuntu) uses systemd but Void uses runit.
+# Without this, dracut pulls in systemd-init/systemd-shutdown from the host
+# which conflicts with the Void rootfs and causes immediate halt on boot.
 dracut --force \
     --add "dmsquash-live" \
+    --omit "systemd systemd-initrd systemd-networkd systemd-hostnamed systemd-resolved systemd-timedated systemd-tmpfiles systemd-journald systemd-sysctl systemd-modules-load systemd-vconsole-setup systemd-sysusers systemd-repart systemd-pcrphase systemd-udevd" \
     --kver "$KVER" \
     --kmoddir "$ROOTFS/lib/modules/$KVER" \
     --fwdir "$ROOTFS/lib/firmware" \
@@ -143,14 +155,36 @@ if [ -z "$VMLINUZ" ]; then
 fi
 
 # ── Squashfs ──────────────────────────────────────────────────────────────────
-step "Creating squashfs image (xz — this takes a while)"
-mkdir -p "$ISO_STAGE/LiveOS"
-mksquashfs "$ROOTFS" "$ISO_STAGE/LiveOS/squashfs.img" \
-    -comp xz -Xdict-size 100% -noappend \
-    -e "$ROOTFS/proc" \
-    -e "$ROOTFS/sys" \
-    -e "$ROOTFS/dev" \
-    -e "$ROOTFS/tmp"
+# dmsquash-live expects: squashfs.img → LiveOS/rootfs.img (ext4 loop image)
+# We create an ext4 image, copy the rootfs into it, then wrap it in squashfs.
+step "Creating ext4 rootfs image"
+ROOTFS_SIZE=$(du -sm "$ROOTFS" --exclude="$ROOTFS/proc" --exclude="$ROOTFS/sys" \
+    --exclude="$ROOTFS/dev" --exclude="$ROOTFS/tmp" | awk '{print $1}')
+# Add 10% headroom
+ROOTFS_SIZE=$(( ROOTFS_SIZE + ROOTFS_SIZE / 10 ))
+echo "    Rootfs size: ${ROOTFS_SIZE}M (with headroom)"
+
+ROOTFS_IMG="$WORK_DIR/rootfs.img"
+truncate -s "${ROOTFS_SIZE}M" "$ROOTFS_IMG"
+mkfs.ext4 -F -L "LiveOS-rootfs" "$ROOTFS_IMG"
+
+ROOTFS_MNT="$WORK_DIR/rootfs-mnt"
+mkdir -p "$ROOTFS_MNT"
+mount -o loop "$ROOTFS_IMG" "$ROOTFS_MNT"
+
+step "Copying rootfs into ext4 image (this takes a while)"
+rsync -aHAX --info=progress2 \
+    --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/tmp/*' \
+    "$ROOTFS/" "$ROOTFS_MNT/"
+umount "$ROOTFS_MNT"
+
+step "Creating squashfs image (xz compression — this takes a while)"
+SQUASH_SRC="$WORK_DIR/squash-src"
+mkdir -p "$SQUASH_SRC/LiveOS" "$ISO_STAGE/LiveOS"
+mv "$ROOTFS_IMG" "$SQUASH_SRC/LiveOS/rootfs.img"
+mksquashfs "$SQUASH_SRC" "$ISO_STAGE/LiveOS/squashfs.img" \
+    -comp xz -Xdict-size 100% -noappend
+rm -rf "$SQUASH_SRC"
 
 # ── ISO boot structure ────────────────────────────────────────────────────────
 step "Assembling ISO boot structure"
