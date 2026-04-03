@@ -16,6 +16,7 @@ MNT="/mnt/voidroot"
 REPO="${REPO:-https://repo-default.voidlinux.org/current}"
 XBPS_DIR="$REAL_HOME/VM/bootstrap"
 XBPS_STATIC="$XBPS_DIR/usr/bin/xbps-install.static"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 
@@ -242,7 +243,17 @@ VM_HASH=$(openssl passwd -6 "$VM_PASS")
 chroot "$MNT" usermod -p "$ROOT_HASH" root        || { echo "ERROR: failed to set root password";     exit 1; }
 chroot "$MNT" usermod -p "$VM_HASH"   "$VM_USER"  || { echo "ERROR: failed to set $VM_USER password"; exit 1; }
 
-# ── Step 10: convert to qcow2 ────────────────────────────────────────────────
+# ── Step 10: embed setup scripts into the VM ─────────────────────────────────
+step "Copying osi-setup scripts into VM (/home/$VM_USER/osi-setup)"
+SETUP_DEST="$MNT/home/$VM_USER/osi-setup"
+rm -rf "$SETUP_DEST"
+cp -r "$PROJECT_DIR" "$SETUP_DEST"
+# Strip any host-side build artifacts that don't belong in the guest
+rm -rf "$SETUP_DEST/.git" "$SETUP_DEST/VM"
+chroot "$MNT" chown -R "$VM_USER:$VM_USER" "/home/$VM_USER/osi-setup"
+echo "    Scripts ready at ~/osi-setup inside the VM"
+
+# ── Step 11: convert to qcow2 ────────────────────────────────────────────────
 step "Converting raw image to qcow2"
 sync
 umount -R "$MNT"
