@@ -98,9 +98,12 @@ xbps-install -y \
     openntpd
 
 # Enable system services
+# Use explicit target names — /var/service is a symlink to a runtime path that
+# may not exist inside a chroot, so we ensure the directory exists first
 step "Enabling core services"
-ln -sf /etc/sv/dbus  /var/service/
-ln -sf /etc/sv/sshd  /var/service/
+mkdir -p /etc/runit/runsvdir/default
+ln -sf /etc/sv/dbus /etc/runit/runsvdir/default/dbus
+ln -sf /etc/sv/sshd /etc/runit/runsvdir/default/sshd
 
 # Add wheel group members to wireshark group for tshark without root
 getent group wireshark &>/dev/null && {

@@ -67,8 +67,9 @@ sudo cp -r "$BASE/config/runit/spice-vdagent"    /etc/sv/ 2>/dev/null || true
 sudo cp -r "$BASE/config/runit/qemu-ga"  /etc/sv/ 2>/dev/null || true
 sudo chmod +x /etc/sv/spice-vdagent/run    2>/dev/null || true
 sudo chmod +x /etc/sv/qemu-ga/run 2>/dev/null || true
-sudo ln -sf /etc/sv/spice-vdagent    /var/service/ 2>/dev/null || true
-sudo ln -sf /etc/sv/qemu-ga /var/service/ 2>/dev/null || true
+sudo mkdir -p /etc/runit/runsvdir/default
+sudo ln -sf /etc/sv/spice-vdagent /etc/runit/runsvdir/default/spice-vdagent 2>/dev/null || true
+sudo ln -sf /etc/sv/qemu-ga       /etc/runit/runsvdir/default/qemu-ga       2>/dev/null || true
 
 # ── System configuration (kernel params, sudoers, ntp, limits) ────────────────
 step "Applying system configuration"

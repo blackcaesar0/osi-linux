@@ -35,7 +35,7 @@ trap cleanup EXIT
 # ── Preflight checks ──────────────────────────────────────────────────────────
 step "Checking prerequisites"
 MISSING=()
-for cmd in mksquashfs xorriso grub-mkrescue curl; do
+for cmd in mksquashfs xorriso grub-mkrescue dracut curl; do
     command -v "$cmd" &>/dev/null || MISSING+=("$cmd")
 done
 if [ "${#MISSING[@]}" -gt 0 ]; then
@@ -62,6 +62,17 @@ fi
 step "Creating fresh rootfs at $ROOTFS"
 rm -rf "$ROOTFS" "$ISO_STAGE"
 mkdir -p "$ROOTFS" "$ISO_STAGE"
+
+# Pre-seed xbps signing keys from the bootstrap cache so xbps-install does not
+# prompt for interactive key import confirmation (breaks non-TTY/background runs)
+if [ -d "$XBPS_DIR/var/db/xbps/keys" ]; then
+    mkdir -p "$ROOTFS/var/db/xbps/keys"
+    cp "$XBPS_DIR/var/db/xbps/keys/"* "$ROOTFS/var/db/xbps/keys/"
+    echo "    Seeded xbps keys from $XBPS_DIR"
+else
+    echo "WARNING: No cached xbps keys found — xbps-install may prompt interactively."
+    echo "         Run sudo bash scripts/bootstrap.sh first to populate the key cache."
+fi
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 step "Bootstrapping Void Linux base system (takes several minutes)"
@@ -96,7 +107,6 @@ LIVEUSER
 
 # ── Live boot initramfs ───────────────────────────────────────────────────────
 step "Building live initramfs"
-chroot "$ROOTFS" xbps-install -y dracut 2>/dev/null || true
 
 KVER=$(ls "$ROOTFS/lib/modules/" 2>/dev/null | sort -V | tail -1)
 if [ -z "$KVER" ]; then
@@ -105,25 +115,25 @@ if [ -z "$KVER" ]; then
 fi
 echo "    Kernel: $KVER"
 
-# dmsquash-live is required for live ISO boot (rd.live.image kernel param)
-# Try installing dracut-live to ensure the module is present
-chroot "$ROOTFS" xbps-install -y dracut-live 2>/dev/null || true
-
-if ! chroot "$ROOTFS" dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
-    echo "ERROR: dmsquash-live module not available in dracut."
-    echo "       This module is required for live ISO boot (rd.live.image)."
-    echo "       A standard initramfs will NOT boot from this ISO."
-    echo "       Options:"
-    echo "         1. Install dracut-live: xbps-install -y dracut-live"
-    echo "         2. Use void-mklive instead (see docs/build-iso.md)"
-    exit 1
+# Void Linux's dracut does not ship the dmsquash-live module.
+# Use the HOST dracut (with dracut-live installed) pointing at the rootfs
+# kernel modules — this avoids the Void dracut limitation entirely.
+if ! dracut --list-modules 2>/dev/null | grep -q dmsquash-live; then
+    echo "    dmsquash-live not found on host — installing dracut-live..."
+    apt-get install -y dracut-live 2>/dev/null \
+        || dnf install -y dracut-live 2>/dev/null \
+        || pacman -S --noconfirm dracut-live 2>/dev/null \
+        || { echo "ERROR: Could not install dracut-live on host. Install it manually and re-run."; exit 1; }
 fi
 
-step "Building dracut initramfs with dmsquash-live module"
-chroot "$ROOTFS" dracut --force \
+step "Building dracut live initramfs using host dracut"
+dracut --force \
     --add "dmsquash-live" \
     --kver "$KVER" \
-    /boot/initramfs-live.img
+    --kmoddir "$ROOTFS/lib/modules/$KVER" \
+    --fwdir "$ROOTFS/lib/firmware" \
+    --no-hostonly \
+    "$ROOTFS/boot/initramfs-live.img"
 
 # ── Locate kernel image ───────────────────────────────────────────────────────
 VMLINUZ=$(ls "$ROOTFS/boot/vmlinuz-"* 2>/dev/null | sort -V | tail -1)

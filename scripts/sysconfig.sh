@@ -65,7 +65,8 @@ cat > /etc/sv/openntpd/run << 'EOF'
 exec /usr/sbin/ntpd -d -s -f /etc/ntpd.conf 2>&1
 EOF
 chmod +x /etc/sv/openntpd/run
-ln -sf /etc/sv/openntpd /var/service/ 2>/dev/null || true
+mkdir -p /etc/runit/runsvdir/default
+ln -sf /etc/sv/openntpd /etc/runit/runsvdir/default/openntpd 2>/dev/null || true
 
 # ── resource limits ───────────────────────────────────────────────────────────
 # NOTE: Cannot use single-quoted heredoc here — $DESKTOP_USER must expand
