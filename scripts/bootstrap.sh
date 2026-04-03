@@ -248,10 +248,12 @@ step "Copying osi-setup scripts into VM (/home/$VM_USER/osi-setup)"
 SETUP_DEST="$MNT/home/$VM_USER/osi-setup"
 rm -rf "$SETUP_DEST"
 cp -r "$PROJECT_DIR" "$SETUP_DEST"
-# Strip any host-side build artifacts that don't belong in the guest
-rm -rf "$SETUP_DEST/.git" "$SETUP_DEST/VM"
+# Strip host-side build artifacts that don't belong in the guest
+# .git is kept so the user can run git pull inside the VM to get updates
+rm -rf "$SETUP_DEST/VM"
 chroot "$MNT" chown -R "$VM_USER:$VM_USER" "/home/$VM_USER/osi-setup"
 echo "    Scripts ready at ~/osi-setup inside the VM"
+echo "    Run 'git pull' inside ~/osi-setup to get future updates"
 
 # ── Step 11: convert to qcow2 ────────────────────────────────────────────────
 step "Converting raw image to qcow2"
