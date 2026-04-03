@@ -65,11 +65,11 @@ if [ -d /etc/sv/spice-vdagent ]; then
 else
     echo "    NOTE: spice-vdagent not installed yet — run deploy-configs.sh to enable it"
 fi
-if [ -d /etc/sv/qemu-guest-agent ]; then
-    ln -sf /etc/sv/qemu-guest-agent /var/service/ \
-        || echo "WARNING: Failed to enable qemu-guest-agent — guest agent won't work"
+if [ -d /etc/sv/qemu-ga ]; then
+    ln -sf /etc/sv/qemu-ga /var/service/ \
+        || echo "WARNING: Failed to enable qemu-ga — guest agent won't work"
 else
-    echo "    NOTE: qemu-guest-agent not installed yet — run deploy-configs.sh to enable it"
+    echo "    NOTE: qemu-ga not installed yet — run deploy-configs.sh to enable it"
 fi
 
 echo ""

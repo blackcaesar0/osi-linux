@@ -78,7 +78,7 @@ xbps-install -y \
 # QEMU/SPICE guest integration
 step "Installing QEMU/SPICE guest tools"
 xbps-install -y \
-    qemu-guest-agent \
+    qemu-ga \
     spice-vdagent
 
 # Pentest networking and scanning
