@@ -135,6 +135,9 @@ fi
 if lb config --help 2>&1 | grep -q -- '--firmware-binary'; then
     LB_EXTRA_ARGS+=( --firmware-binary true --firmware-chroot true )
 fi
+if lb config --help 2>&1 | grep -q -- '--initsystem'; then
+    LB_EXTRA_ARGS+=( --initsystem systemd )
+fi
 
 # Pass keyring to debootstrap via environment if the flag isn't available
 export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
@@ -158,6 +161,7 @@ lb config \
     --iso-volume "OSI_LIVE" \
     --memtest none \
     --security false \
+    --system live \
     "${LB_EXTRA_ARGS[@]}" \
     $VERBOSE
 
