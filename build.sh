@@ -183,6 +183,20 @@ find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES' 2>/
 find "$BUILD_DIR/config" -type f 2>/dev/null \
     | xargs -r sed -i '/-updates/d' 2>/dev/null || true
 
+# Belt-and-suspenders: tell apt inside the chroot to treat missing repos as
+# warnings instead of fatal errors. live-build copies config/apt/apt.conf.d/*
+# into the chroot (lb_chroot_apt, step 11) BEFORE lb_chroot_archives (step 12)
+# runs apt-get update, so this is in place when the 404 would otherwise fail.
+step "Adding APT config to tolerate missing repos"
+mkdir -p "$BUILD_DIR/config/apt/apt.conf.d"
+cat > "$BUILD_DIR/config/apt/apt.conf.d/99ignore-missing-repos" << 'APTEOF'
+// Kali rolling has no -updates or -security suites.
+// live-build may generate entries for them anyway; let apt continue.
+Acquire::AllowInsecureRepositories "false";
+APT::Update::Error-Mode "any";
+APTEOF
+echo "    Created config/apt/apt.conf.d/99ignore-missing-repos"
+
 # ── Copy our variant package list ─────────────────────────────────────────────
 step "Installing package lists and overlays"
 VARIANT_DIR="$PROJECT_DIR/kali-config/variant-$VARIANT"
