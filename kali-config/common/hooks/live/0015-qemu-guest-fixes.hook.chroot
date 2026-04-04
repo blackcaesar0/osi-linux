@@ -1,0 +1,117 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — QEMU/KVM guest fixes
+# Fixes known issues with Kali + XFCE running as a QEMU/KVM guest.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Applying QEMU/KVM guest fixes..."
+
+# ── Fix 1: spice-vdagentd socket directory ───────────────────────────────────
+# Without this, spice-vdagent fails silently and clipboard doesn't work.
+mkdir -p /run/spice-vdagentd
+mkdir -p /etc/tmpfiles.d
+cat > /etc/tmpfiles.d/spice-vdagentd.conf << 'EOF'
+d /run/spice-vdagentd 0755 root root -
+EOF
+
+# Harden spice-vdagentd service
+mkdir -p /etc/systemd/system/spice-vdagentd.service.d
+cat > /etc/systemd/system/spice-vdagentd.service.d/override.conf << 'EOF'
+[Unit]
+ConditionPathExists=
+
+[Service]
+Restart=on-failure
+RestartSec=2
+EOF
+
+# ── Fix 2: virtio-gpu kernel module settings ─────────────────────────────────
+cat > /etc/modprobe.d/virtio-gpu.conf << 'EOF'
+options virtio_gpu modeset=1
+EOF
+
+# ── Fix 3: Mouse cursor disappears or gets stuck ────────────────────────────
+cat > /etc/udev/rules.d/98-osi-tablet.rules << 'EOF'
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="QEMU QEMU USB Tablet", RUN+="/usr/bin/xdotool mousemove 960 540"
+EOF
+
+# ── Fix 4: Audio crackling with intel-hda in QEMU ───────────────────────────
+mkdir -p /etc/pulse
+cat > /etc/pulse/daemon.conf << 'EOF'
+default-sample-format = s16le
+default-sample-rate = 48000
+default-sample-channels = 2
+default-fragments = 8
+default-fragment-size-msec = 10
+resample-method = speex-float-3
+enable-remixing = yes
+flat-volumes = no
+avoid-resampling = yes
+EOF
+
+# ── Fix 5: Console font too small in large SPICE window ─────────────────────
+cat > /etc/default/console-setup << 'EOF'
+CHARMAP="UTF-8"
+CODESET="Lat15"
+FONTFACE="TerminusBold"
+FONTSIZE="16x32"
+EOF
+
+# ── Fix 6: systemd-resolved conflicts with NetworkManager DNS ────────────────
+systemctl mask systemd-resolved.service 2>/dev/null || true
+rm -f /etc/resolv.conf
+cat > /etc/resolv.conf << 'EOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
+
+# ── Fix 7: Docker overlay2 for VM ───────────────────────────────────────────
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json << 'EOF'
+{
+    "storage-driver": "overlay2",
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-size": "10m",
+        "max-file": "3"
+    },
+    "dns": ["8.8.8.8", "1.1.1.1"]
+}
+EOF
+
+# ── Fix 8: journald — limit log size ────────────────────────────────────────
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/osi.conf << 'EOF'
+[Journal]
+SystemMaxUse=100M
+SystemMaxFileSize=25M
+MaxRetentionSec=1week
+Compress=yes
+EOF
+
+# ── Fix 9: Disable useless services in VM ────────────────────────────────────
+for svc in \
+    bluetooth.service \
+    ModemManager.service \
+    pppd-dns.service \
+    wpa_supplicant.service \
+    ; do
+    systemctl disable "$svc" 2>/dev/null || true
+done
+
+# ── Fix 10: Clipboard helper ────────────────────────────────────────────────
+cat > /usr/local/bin/clip << 'SCRIPT'
+#!/bin/bash
+if [ "$1" = "-o" ] || [ "$1" = "--paste" ]; then
+    xclip -selection clipboard -o
+elif [ ! -t 0 ]; then
+    xclip -selection clipboard
+else
+    echo "Usage: echo text | clip     # copy"
+    echo "       clip -o              # paste"
+fi
+SCRIPT
+chmod +x /usr/local/bin/clip
+
+echo "[OSI] QEMU/KVM guest fixes applied."

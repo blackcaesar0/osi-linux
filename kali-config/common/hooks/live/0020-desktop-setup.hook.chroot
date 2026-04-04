@@ -27,8 +27,9 @@ export GOPATH="$HOME/go"
 export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
 BASHEOF
 
-# ── GTK dark theme ────────────────────────────────────────────────────────────
+# ── GTK dark theme with proper font rendering ────────────────────────────────
 mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
+
 cat > /etc/skel/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
 gtk-icon-theme-name=Papirus-Dark
@@ -36,9 +37,70 @@ gtk-theme-name=Kali-Dark
 gtk-font-name=Hack 10
 gtk-cursor-theme-name=Adwaita
 gtk-cursor-theme-size=24
+gtk-toolbar-style=GTK_TOOLBAR_BOTH_HORIZ
+gtk-toolbar-icon-size=GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-enable-event-sounds=0
+gtk-enable-input-feedback-sounds=0
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
 gtk-application-prefer-dark-theme=1
 EOF
 cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
+
+# GTK2 settings (for older apps like wireshark)
+cat > /etc/skel/.gtkrc-2.0 << 'EOF'
+gtk-icon-theme-name="Papirus-Dark"
+gtk-theme-name="Kali-Dark"
+gtk-font-name="Hack 10"
+gtk-cursor-theme-name="Adwaita"
+gtk-cursor-theme-size=24
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle="hintslight"
+gtk-xft-rgba="rgb"
+EOF
+
+# ── Xresources for DPI and cursor ────────────────────────────────────────────
+cat > /etc/skel/.Xresources << 'EOF'
+Xft.dpi: 96
+Xft.antialias: true
+Xft.hinting: true
+Xft.hintstyle: hintslight
+Xft.rgba: rgb
+Xft.lcdfilter: lcddefault
+Xcursor.theme: Adwaita
+Xcursor.size: 24
+EOF
+
+# ── Font config — better rendering in VM ─────────────────────────────────────
+mkdir -p /etc/skel/.config/fontconfig
+cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <match target="font">
+    <edit name="antialias" mode="assign"><bool>true</bool></edit>
+    <edit name="hinting" mode="assign"><bool>true</bool></edit>
+    <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
+    <edit name="rgba" mode="assign"><const>rgb</const></edit>
+    <edit name="lcdfilter" mode="assign"><const>lcddefault</const></edit>
+  </match>
+  <alias>
+    <family>monospace</family>
+    <prefer><family>Hack</family></prefer>
+  </alias>
+  <alias>
+    <family>sans-serif</family>
+    <prefer><family>Noto Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>serif</family>
+    <prefer><family>Noto Serif</family></prefer>
+  </alias>
+</fontconfig>
+EOF
 
 # ── Tools directory structure ─────────────────────────────────────────────────
 mkdir -p /etc/skel/tools/{recon,exploitation,post-exploitation,web,network,forensics,custom,wordlists}
@@ -85,9 +147,12 @@ background=/usr/share/backgrounds/osi/osi.png
 user-background=false
 position=50%,center 50%,center
 default-user-image=/usr/share/backgrounds/osi/osi.png
+indicators=~host;~spacer;~clock;~spacer;~session;~power
+clock-format=%H:%M  |  %Y-%m-%d
+active-monitor=#cursor
 EOF
 
-# ── XFCE default session — ensure xfce4-session is the default ────────────────
+# ── XFCE default session ─────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config/xfce4
 cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
 #!/bin/sh
@@ -95,6 +160,9 @@ cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
 if command -v spice-vdagent >/dev/null 2>&1; then
     spice-vdagent &
 fi
+
+# Load Xresources for DPI/font settings
+[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
 
 # Start XFCE
 exec startxfce4

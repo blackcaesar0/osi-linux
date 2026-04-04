@@ -47,17 +47,51 @@ cat > /etc/motd << 'EOF'
   │  Desktop:        XFCE               │
   │  Terminal:       Ctrl+Alt+T         │
   │  File manager:   Thunar             │
+  │  Clipboard:      auto (SPICE)       │
+  │  Resize:         drag SPICE window  │
+  │                                     │
+  │  VM helpers:                        │
+  │    fix-display   fix-clipboard      │
   └─────────────────────────────────────┘
 
 EOF
 
-# ── Set wallpaper as default background ───────────────────────────────────────
+# ── Generate wallpaper if osi.png doesn't exist ──────────────────────────────
+generate_wallpaper() {
+    local out="$1"
+    if ! command -v convert &>/dev/null; then
+        echo "    [WARN] ImageMagick not available — skipping wallpaper generation"
+        return 1
+    fi
+    echo "    Generating wallpaper (1920x1080)..."
+    convert -size 1920x1080 \
+        xc:"#0a0a0f" \
+        \( -size 1920x1080 gradient:"#0a0a1a"-"#0a0a0f" \
+           -rotate 45 -gravity center -crop 1920x1080+0+0 +repage \
+        \) -compose Overlay -composite \
+        \( -size 1920x1080 xc:none \
+           -fill "#00ffcc08" -draw "circle 960,540 960,900" \
+        \) -compose Over -composite \
+        -font "Hack-Bold" -pointsize 72 -fill "#00ffcc" -gravity center \
+        -annotate +0-60 "OSI" \
+        -font "Hack-Regular" -pointsize 24 -fill "#565f89" \
+        -annotate +0+30 "Offensive Security Intel" \
+        -quality 95 "$out"
+}
+
+mkdir -p /usr/share/backgrounds/osi
+mkdir -p /etc/skel/wallpaper
+
+if [ ! -f /usr/share/backgrounds/osi/osi.png ] || [ ! -s /usr/share/backgrounds/osi/osi.png ]; then
+    generate_wallpaper /usr/share/backgrounds/osi/osi.png || true
+fi
+
 if [ -f /usr/share/backgrounds/osi/osi.png ]; then
-    mkdir -p /usr/share/backgrounds
+    cp /usr/share/backgrounds/osi/osi.png /etc/skel/wallpaper/osi.png
     ln -sf /usr/share/backgrounds/osi/osi.png /usr/share/backgrounds/default.png 2>/dev/null || true
 fi
 
-# ── XFCE clipman autostart (persistent clipboard) ────────────────────────────
+# ── XFCE clipman autostart (persistent clipboard across apps) ────────────────
 mkdir -p /etc/xdg/autostart
 cat > /etc/xdg/autostart/xfce4-clipman-plugin-autostart.desktop << 'EOF'
 [Desktop Entry]
