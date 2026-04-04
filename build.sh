@@ -214,9 +214,31 @@ cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$BUILD_DIR/config
 # Rootfs overlay (configs, skel, sysctl, etc.)
 cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/" 2>/dev/null || true
 
-# ── Build ─────────────────────────────────────────────────────────────────────
-step "Building ISO (this will take 30-90 minutes depending on bandwidth and CPU)"
-lb build 2>&1 | tee "$BUILD_DIR/build.log"
+# ── Build (staged) ────────────────────────────────────────────────────────────
+# We split lb build into bootstrap → chroot → binary so we can inject an apt
+# config into the chroot between stages.  live-build's lb_chroot_archives
+# generates a sources.list entry for kali-rolling-updates (which 404s) and
+# none of the LB_UPDATES patches reach its internal logic.  By writing the
+# apt.conf.d file directly into the bootstrapped chroot BEFORE lb chroot runs,
+# apt-get update will treat the 404 as a warning, not an error.
+
+step "Stage 1/3: Bootstrap"
+lb bootstrap 2>&1 | tee -a "$BUILD_DIR/build.log"
+
+step "Injecting apt config into chroot to tolerate missing repos"
+mkdir -p "$BUILD_DIR/chroot/etc/apt/apt.conf.d"
+cat > "$BUILD_DIR/chroot/etc/apt/apt.conf.d/99ignore-missing-repos" << 'APTEOF'
+// Kali rolling has no -updates or -security suites.
+// live-build generates entries for them anyway; let apt continue.
+APT::Update::Error-Mode "any";
+APTEOF
+echo "    Wrote chroot/etc/apt/apt.conf.d/99ignore-missing-repos"
+
+step "Stage 2/3: Chroot (installing packages — this is the slow part)"
+lb chroot 2>&1 | tee -a "$BUILD_DIR/build.log"
+
+step "Stage 3/3: Binary (assembling ISO)"
+lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 # ── Output ────────────────────────────────────────────────────────────────────
 # Find the built ISO — name depends on live-build version and --image-name support
