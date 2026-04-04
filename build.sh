@@ -250,14 +250,14 @@ echo "    Installed wrapper: apt-get → apt-get.real"
 step "Stage 2/3: Chroot (installing packages — this is the slow part)"
 lb chroot 2>&1 | tee -a "$BUILD_DIR/build.log"
 
-step "Restoring real apt-get for final ISO"
+step "Stage 3/3: Binary (assembling ISO)"
+lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
+
+step "Restoring real apt-get in chroot"
 if [ -f "$APT_REAL" ]; then
     mv "$APT_REAL" "$APT_WRAPPER"
     echo "    Restored original apt-get"
 fi
-
-step "Stage 3/3: Binary (assembling ISO)"
-lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 # ── Output ────────────────────────────────────────────────────────────────────
 # Find the built ISO — name depends on live-build version and --image-name support
