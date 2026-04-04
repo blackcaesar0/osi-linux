@@ -119,12 +119,19 @@ cp "$PROJECT_DIR/wallpaper/osi.png"                "$INCLUDES/usr/share/backgrou
 
 # ── lb config ─────────────────────────────────────────────────────────────────
 step "Configuring live-build"
+# lb wrapper (#!/bin/sh, set -e) builds ENV by running grep on each environment
+# file. If config/environment.binary exists but is empty, grep -v '^#' returns
+# exit 1 (no matches), which triggers set -e in POSIX sh and kills lb silently
+# before lb_config ever runs. Delete the file — lb will recreate it if needed.
+rm -f "$BUILD_DIR/config/environment.binary"
 
 # Detect which flags the installed live-build supports.
 # Newer versions dropped --debootstrap-options, --image-name, and --updates.
 LB_EXTRA_ARGS=()
 if lb config --help 2>&1 | grep -q -- '--debootstrap-options'; then
-    LB_EXTRA_ARGS+=( --debootstrap-options "--keyring=$KALI_KEYRING" )
+    # sysvinit-utils provides start-stop-daemon — required early by dpkg postinst scripts.
+    # Without it, lb_chroot_install-packages fails with "start-stop-daemon not found in PATH".
+    LB_EXTRA_ARGS+=( --debootstrap-options "--keyring=$KALI_KEYRING --include=sysvinit-utils" )
 fi
 if lb config --help 2>&1 | grep -q -- '--image-name'; then
     LB_EXTRA_ARGS+=( --image-name "osi-linux" )
@@ -166,23 +173,24 @@ lb config \
     $VERBOSE
 
 # ── Patch out updates repo — Kali has no kali-rolling-updates ────────────────
-# live-build ignores --updates false on some versions and still generates
-# a sources.list entry for $DISTRIBUTION-updates which 404s on Kali.
-# Force LB_UPDATES=false in every config file lb generates.
+# lb_chroot_archives checks LB_VOLATILE (not LB_UPDATES) to decide whether to
+# add $DISTRIBUTION-updates entries. Set both to false.
 step "Patching out non-existent updates repo"
 for cfg in "$BUILD_DIR/config/common" "$BUILD_DIR/config/bootstrap" "$BUILD_DIR/config/chroot" "$BUILD_DIR/config/binary"; do
     if [ -f "$cfg" ]; then
-        if grep -q '^LB_UPDATES=' "$cfg" 2>/dev/null; then
-            sed -i 's/^LB_UPDATES=.*/LB_UPDATES="false"/' "$cfg"
-        else
-            echo 'LB_UPDATES="false"' >> "$cfg"
-        fi
+        for var in LB_UPDATES LB_VOLATILE; do
+            if grep -q "^${var}=" "$cfg" 2>/dev/null; then
+                sed -i "s/^${var}=.*/${var}=\"false\"/" "$cfg"
+            else
+                echo "${var}=\"false\"" >> "$cfg"
+            fi
+        done
         echo "    Patched $cfg"
     fi
 done
-# Also scan for any other config files that might have it
-find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES' 2>/dev/null \
-    | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g' 2>/dev/null || true
+# Also scan for any other config files that might have them
+find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
+    | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true
 # Remove any pre-seeded sources.list files that reference -updates
 find "$BUILD_DIR/config" -type f 2>/dev/null \
     | xargs -r sed -i '/-updates/d' 2>/dev/null || true
@@ -248,9 +256,114 @@ chmod +x "$APT_WRAPPER"
 echo "    Installed wrapper: apt-get → apt-get.real"
 
 step "Stage 2/3: Chroot (installing packages — this is the slow part)"
+
+# Ensure dpkg inside the chroot can find start-stop-daemon and other sbin tools.
+# On merged-usr hosts the chroot may not have /sbin in PATH — dpkg requires it.
+cat > "$BUILD_DIR/config/environment.chroot" << 'ENVEOF'
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENVEOF
+
+# Belt-and-suspenders: also create the symlink directly in the chroot if missing.
+if [ ! -e "$BUILD_DIR/chroot/sbin" ]; then
+    ln -sf usr/sbin "$BUILD_DIR/chroot/sbin" 2>/dev/null || true
+fi
+if [ ! -e "$BUILD_DIR/chroot/usr/sbin/start-stop-daemon" ] && \
+   [ -e "$BUILD_DIR/chroot/sbin/start-stop-daemon" ]; then
+    mkdir -p "$BUILD_DIR/chroot/usr/sbin"
+    cp "$BUILD_DIR/chroot/sbin/start-stop-daemon" "$BUILD_DIR/chroot/usr/sbin/" 2>/dev/null || true
+fi
+
 lb chroot 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 step "Stage 3/3: Binary (assembling ISO)"
+
+# Suppress needrestart and debconf interactive prompts inside the binary chroot.
+# Without this, needrestart sees the kernel version mismatch (host vs chroot kernel)
+# and blocks with a [Return] prompt that hangs unattended builds.
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+
+# Fix broken syslinux symlinks in lb's bootloaders directory.
+# The lb bootloaders/isolinux/ dir has symlinks to /usr/lib/syslinux/{isolinux.bin,vesamenu.c32}
+# which don't exist on Ubuntu/Mint or Kali — those files moved to /usr/lib/ISOLINUX/ and
+# /usr/lib/syslinux/modules/bios/. lb copies these symlinks into the binary chroot and then
+# runs cp -aL to dereference them; if the targets don't exist the copy fails.
+# Fix: retarget the symlinks to the modern paths (same on both host and Kali chroot).
+_LB_ISOLINUX_DIR="/usr/share/live/build/bootloaders/isolinux"
+# Replace broken symlinks with actual file copies. lb does cp -a (copies symlinks as-is)
+# then cp -aL inside the chroot (dereferences symlinks). If the symlink targets don't exist
+# inside the chroot, the copy fails. Replacing with real files sidesteps the whole issue.
+if [ -L "$_LB_ISOLINUX_DIR/isolinux.bin" ] && [ ! -e "$_LB_ISOLINUX_DIR/isolinux.bin" ]; then
+    rm "$_LB_ISOLINUX_DIR/isolinux.bin"
+    cp /usr/lib/ISOLINUX/isolinux.bin "$_LB_ISOLINUX_DIR/isolinux.bin"
+    echo "    Replaced broken isolinux.bin symlink with actual file"
+fi
+if [ -L "$_LB_ISOLINUX_DIR/vesamenu.c32" ] && [ ! -e "$_LB_ISOLINUX_DIR/vesamenu.c32" ]; then
+    rm "$_LB_ISOLINUX_DIR/vesamenu.c32"
+    cp /usr/lib/syslinux/modules/bios/vesamenu.c32 "$_LB_ISOLINUX_DIR/vesamenu.c32"
+    echo "    Replaced broken vesamenu.c32 symlink with actual file"
+fi
+# Remove any stale isolinux staging dir from previous runs. cp -a over a directory
+# containing broken symlinks doesn't replace them — it tries to follow them and fails.
+# A fresh copy is the only reliable option.
+rm -rf "$BUILD_DIR/chroot/root/isolinux"
+# Also remove binary/isolinux so lb's mv step renames rather than nests.
+rm -rf "$BUILD_DIR/binary/isolinux"
+
+# lb_binary_syslinux renames vmlinuz-<ver> → vmlinuz on first run. On retries the
+# versioned name is gone and the glob fails. Restore versioned names if needed.
+_KVER=$(ls "$BUILD_DIR/chroot/boot/vmlinuz-"* 2>/dev/null | sed 's/.*vmlinuz-//' | head -1)
+if [ -n "$_KVER" ]; then
+    if [ -f "$BUILD_DIR/binary/live/vmlinuz" ] && \
+       [ ! -f "$BUILD_DIR/binary/live/vmlinuz-${_KVER}" ]; then
+        mv "$BUILD_DIR/binary/live/vmlinuz" "$BUILD_DIR/binary/live/vmlinuz-${_KVER}"
+        echo "    Restored vmlinuz → vmlinuz-${_KVER}"
+    fi
+    if [ -f "$BUILD_DIR/binary/live/initrd.img" ] && \
+       [ ! -f "$BUILD_DIR/binary/live/initrd.img-${_KVER}" ]; then
+        mv "$BUILD_DIR/binary/live/initrd.img" "$BUILD_DIR/binary/live/initrd.img-${_KVER}"
+        echo "    Restored initrd.img → initrd.img-${_KVER}"
+    fi
+fi
+
+# lb_binary_syslinux unconditionally tries to unpack binary/isolinux/bootlogo
+# (Ubuntu gfxboot code that runs for all modes). It doesn't exist for Kali/Debian
+# builds. Add an empty valid cpio archive to the lb bootloaders source dir so it
+# gets carried through cp-a → cp-aL → mv into binary/isolinux/ automatically.
+(cd /tmp && cpio --quiet -o < /dev/null) > "$_LB_ISOLINUX_DIR/bootlogo"
+
+# librsvg2-bin renamed rsvg → rsvg-convert and changed argument syntax.
+# Old: rsvg [opts] input.svg output.png
+# New: rsvg-convert [opts] -o output.png input.svg
+# A symlink isn't enough — write a wrapper that translates the call.
+if [ -x "$BUILD_DIR/chroot/usr/bin/rsvg-convert" ]; then
+    cat > "$BUILD_DIR/chroot/usr/bin/rsvg" << 'RSVGEOF'
+#!/bin/bash
+args=("$@")
+n=${#args[@]}
+output="${args[$((n-1))]}"
+input="${args[$((n-2))]}"
+opts=("${args[@]:0:$((n-2))}")
+exec rsvg-convert "${opts[@]}" -o "$output" "$input"
+RSVGEOF
+    chmod +x "$BUILD_DIR/chroot/usr/bin/rsvg"
+    echo "    Created rsvg compat wrapper in chroot"
+fi
+
+# genisoimage rejects files >4GB without -allow-limited-size. lb_binary_iso uses
+# the GENISOIMAGE_OPTIONS_EXTRA shell variable directly — export it so lb_binary_iso
+# inherits it. config/environment.binary is NOT used here because lb's exec wrapper
+# passes those words through shell expansion where they aren't recognized as assignments.
+export GENISOIMAGE_OPTIONS_EXTRA=-allow-limited-size
+
+# isohybrid makes the ISO bootable from USB (hybrid ISO). It's in syslinux-utils
+# on the host but lb's Check_package looks for it in the chroot. Symlink it in.
+if [ -x /usr/bin/isohybrid ] && [ ! -e "$BUILD_DIR/chroot/usr/bin/isohybrid" ]; then
+    ln -sf /usr/bin/isohybrid "$BUILD_DIR/chroot/usr/bin/isohybrid"
+    echo "    Linked isohybrid into chroot"
+fi
+
 lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 step "Restoring real apt-get in chroot"

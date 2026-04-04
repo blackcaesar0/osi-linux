@@ -127,15 +127,34 @@ chmod 0440 /etc/sudoers.d/99-osi-nopasswd
 echo "osi:osi" | chpasswd 2>/dev/null || true
 echo "root:toor" | chpasswd 2>/dev/null || true
 
-# ── LightDM — auto-login with XFCE ──────────────────────────────────────────
+# ── LightDM — auto-login with XFCE in X11 mode ──────────────────────────────
+# Explicitly force X11 session type. spice-vdagent is X11-only — if LightDM
+# starts a Wayland session, spice-vdagent exits immediately ("Screen count is
+# zero, are we on wayland?") and both clipboard and auto-resize stop working.
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/50-osi.conf << 'EOF'
 [Seat:*]
 autologin-user=osi
 autologin-session=xfce
 user-session=xfce
+greeter-session=lightdm-gtk-greeter
 greeter-hide-users=false
+xserver-command=X -keeptty
 EOF
+
+# Prevent spice-vdagent systemd user service from starting alongside the
+# XDG autostart entry. Two vdagent instances in the same session causes
+# vdagentd to kill the second one with "multiple agents in one session".
+# XDG autostart (spice-vdagent.desktop) is the only path we use.
+mkdir -p /etc/skel/.config/systemd/user
+cat > /etc/skel/.config/systemd/user/spice-vdagent.service << 'EOF'
+[Unit]
+Description=Masked — using XDG autostart instead to avoid double-instance kill
+
+[Service]
+ExecStart=/bin/true
+EOF
+# This masks the systemd user service by replacing it with a no-op
 
 # LightDM greeter theme
 cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'

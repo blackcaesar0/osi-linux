@@ -1,0 +1,63 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — First-boot service
+#
+# Runs ONCE on the first boot after install. Does:
+#   - Regenerate SSH host keys (every VM clone gets unique keys)
+#   - Initialize Metasploit database (msfdb init)
+#   - Remove itself after completion
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Installing first-boot service..."
+
+cat > /usr/local/bin/osi-first-boot << 'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+exec >> /var/log/osi-first-boot.log 2>&1
+echo "[$(date)] First boot starting..."
+
+# Regenerate SSH host keys (unique per VM/install)
+echo "[$(date)] Regenerating SSH host keys..."
+rm -f /etc/ssh/ssh_host_*
+ssh-keygen -A
+echo "[$(date)] SSH host keys regenerated."
+
+# Initialize Metasploit database
+echo "[$(date)] Initializing Metasploit database..."
+if command -v msfdb &>/dev/null; then
+    msfdb reinit 2>&1 || msfdb init 2>&1 || true
+    echo "[$(date)] Metasploit database ready."
+fi
+
+# Set hostname from DHCP lease if possible (makes clones distinguishable)
+# Default stays 'osi' — this is just informational
+echo "[$(date)] Hostname: $(hostname)"
+
+echo "[$(date)] First boot complete. Disabling service."
+systemctl disable osi-first-boot.service 2>/dev/null || true
+rm -f /etc/systemd/system/osi-first-boot.service
+systemctl daemon-reload
+SCRIPT
+chmod +x /usr/local/bin/osi-first-boot
+
+cat > /etc/systemd/system/osi-first-boot.service << 'EOF'
+[Unit]
+Description=OSI Linux First Boot Setup
+After=network.target postgresql.service
+ConditionPathExists=/usr/local/bin/osi-first-boot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/osi-first-boot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable osi-first-boot.service 2>/dev/null || true
+
+echo "[OSI] First-boot service installed."
