@@ -86,7 +86,7 @@ cd "$BUILD_DIR"
 if [ -n "$DO_CLEAN" ]; then
     step "Cleaning previous build"
     lb clean --purge 2>/dev/null || true
-    rm -rf config/ .build/
+    rm -rf config/ .build/ cache/
 fi
 
 # ── Assemble includes.chroot from config/ ─────────────────────────────────────
