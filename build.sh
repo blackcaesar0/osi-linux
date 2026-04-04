@@ -139,13 +139,14 @@ fi
 # Pass keyring to debootstrap via environment if the flag isn't available
 export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
 
+# Kali uses a single rolling repo — no separate security or updates repos.
+# Setting --security false prevents live-build from appending /updates which 404s.
 lb config \
     --distribution "$DISTRIBUTION" \
     --archive-areas "main contrib non-free non-free-firmware" \
     --mirror-bootstrap "http://http.kali.org/kali" \
-    --mirror-chroot-security "http://http.kali.org/kali" \
+    --mirror-chroot "http://http.kali.org/kali" \
     --mirror-binary "http://http.kali.org/kali" \
-    --mirror-binary-security "http://http.kali.org/kali" \
     --keyring-packages kali-archive-keyring \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
@@ -156,7 +157,7 @@ lb config \
     --iso-publisher "OSI Team" \
     --iso-volume "OSI_LIVE" \
     --memtest none \
-    --security true \
+    --security false \
     "${LB_EXTRA_ARGS[@]}" \
     $VERBOSE
 
