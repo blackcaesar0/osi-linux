@@ -164,21 +164,24 @@ lb config \
 # ── Patch out updates repo — Kali has no kali-rolling-updates ────────────────
 # live-build ignores --updates false on some versions and still generates
 # a sources.list entry for $DISTRIBUTION-updates which 404s on Kali.
-# Remove it from all generated config files.
+# Force LB_UPDATES=false in every config file lb generates.
 step "Patching out non-existent updates repo"
-find "$BUILD_DIR/config" -type f -name '*.list' -o -name '*.list.*' -o -name 'sources.*' 2>/dev/null \
-    | xargs -r sed -i '/kali-rolling-updates/d' 2>/dev/null || true
-# Also set the updates flag to false in the bootstrap config if it exists
-if [ -f "$BUILD_DIR/config/bootstrap" ]; then
-    sed -i 's/^LB_UPDATES=.*/LB_UPDATES="false"/' "$BUILD_DIR/config/bootstrap"
-fi
-# And in the chroot config
-if [ -f "$BUILD_DIR/config/chroot" ]; then
-    sed -i 's/^LB_UPDATES=.*/LB_UPDATES="false"/' "$BUILD_DIR/config/chroot"
-fi
-# Nuclear option: find any file in config/ that sets LB_UPDATES to true
-find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES="true"' 2>/dev/null \
+for cfg in "$BUILD_DIR/config/common" "$BUILD_DIR/config/bootstrap" "$BUILD_DIR/config/chroot" "$BUILD_DIR/config/binary"; do
+    if [ -f "$cfg" ]; then
+        if grep -q '^LB_UPDATES=' "$cfg" 2>/dev/null; then
+            sed -i 's/^LB_UPDATES=.*/LB_UPDATES="false"/' "$cfg"
+        else
+            echo 'LB_UPDATES="false"' >> "$cfg"
+        fi
+        echo "    Patched $cfg"
+    fi
+done
+# Also scan for any other config files that might have it
+find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES' 2>/dev/null \
     | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g' 2>/dev/null || true
+# Remove any pre-seeded sources.list files that reference -updates
+find "$BUILD_DIR/config" -type f 2>/dev/null \
+    | xargs -r sed -i '/-updates/d' 2>/dev/null || true
 
 # ── Copy our variant package list ─────────────────────────────────────────────
 step "Installing package lists and overlays"
