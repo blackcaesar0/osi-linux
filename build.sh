@@ -119,6 +119,26 @@ cp "$PROJECT_DIR/wallpaper/osi.png"                "$INCLUDES/usr/share/backgrou
 
 # ── lb config ─────────────────────────────────────────────────────────────────
 step "Configuring live-build"
+
+# Detect which flags the installed live-build supports.
+# Newer versions dropped --debootstrap-options, --image-name, and --updates.
+LB_EXTRA_ARGS=()
+if lb config --help 2>&1 | grep -q -- '--debootstrap-options'; then
+    LB_EXTRA_ARGS+=( --debootstrap-options "--keyring=$KALI_KEYRING" )
+fi
+if lb config --help 2>&1 | grep -q -- '--image-name'; then
+    LB_EXTRA_ARGS+=( --image-name "osi-linux" )
+fi
+if lb config --help 2>&1 | grep -q -- '--updates'; then
+    LB_EXTRA_ARGS+=( --updates true )
+fi
+if lb config --help 2>&1 | grep -q -- '--firmware-binary'; then
+    LB_EXTRA_ARGS+=( --firmware-binary true --firmware-chroot true )
+fi
+
+# Pass keyring to debootstrap via environment if the flag isn't available
+export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
+
 lb config \
     --distribution "$DISTRIBUTION" \
     --archive-areas "main contrib non-free non-free-firmware" \
@@ -126,22 +146,18 @@ lb config \
     --mirror-chroot-security "http://http.kali.org/kali" \
     --mirror-binary "http://http.kali.org/kali" \
     --mirror-binary-security "http://http.kali.org/kali" \
-    --debootstrap-options "--keyring=$KALI_KEYRING" \
     --keyring-packages kali-archive-keyring \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
     --bootappend-live "boot=live components username=osi hostname=osi" \
     --apt-options "--yes --option Acquire::Retries=5" \
     --binary-images iso-hybrid \
-    --firmware-binary true \
-    --firmware-chroot true \
-    --image-name "osi-linux" \
     --iso-application "OSI Linux" \
     --iso-publisher "OSI Team" \
     --iso-volume "OSI_LIVE" \
     --memtest none \
-    --updates true \
     --security true \
+    "${LB_EXTRA_ARGS[@]}" \
     $VERBOSE
 
 # ── Copy our variant package list ─────────────────────────────────────────────
@@ -166,7 +182,10 @@ step "Building ISO (this will take 30-90 minutes depending on bandwidth and CPU)
 lb build 2>&1 | tee "$BUILD_DIR/build.log"
 
 # ── Output ────────────────────────────────────────────────────────────────────
+# Find the built ISO — name depends on live-build version and --image-name support
 ISO_FILE=$(ls "$BUILD_DIR"/osi-linux-*.iso 2>/dev/null | head -1)
+[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/live-image-*.iso 2>/dev/null | head -1)
+[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/*.iso 2>/dev/null | head -1)
 if [ -z "$ISO_FILE" ]; then
     echo "ERROR: Build failed — no ISO found. Check build.log"
     exit 1
