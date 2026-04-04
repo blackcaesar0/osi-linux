@@ -130,7 +130,7 @@ if lb config --help 2>&1 | grep -q -- '--image-name'; then
     LB_EXTRA_ARGS+=( --image-name "osi-linux" )
 fi
 if lb config --help 2>&1 | grep -q -- '--updates'; then
-    LB_EXTRA_ARGS+=( --updates true )
+    LB_EXTRA_ARGS+=( --updates false )
 fi
 if lb config --help 2>&1 | grep -q -- '--firmware-binary'; then
     LB_EXTRA_ARGS+=( --firmware-binary true --firmware-chroot true )
