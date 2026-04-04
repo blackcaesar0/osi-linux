@@ -13,7 +13,7 @@ XFCE desktop with OSI team branding, curated tool selection, copy/paste and auto
 - **Copy/paste works immediately** — SPICE vdagent + clipman, no configuration needed
 - **Auto-resize display** — resize the SPICE window and the guest follows instantly
 - **OSI team theme** — dark base with custom branding, Papirus-Dark icons, Hack font
-- **SPICE + QEMU guest agent** — clipboard sharing, display auto-resize, USB redirection
+- **QEMU/KVM optimized** — virtio-gpu, virtio-scsi, virtio-net, SPICE audio, balloon, RNG
 - **Curated tools** — metasploit, nmap, burpsuite, bloodhound, impacket, hashcat, ghidra, and more
 - **Development ready** — Python 3, Ruby, Go, Node.js, Java, full build toolchain
 - **Live ISO** — boot from USB or run in QEMU, install to disk when ready
@@ -32,7 +32,7 @@ git clone https://github.com/blackcaesar0/osi-linux
 cd osi-linux
 
 # Install prerequisites
-sudo apt install git live-build cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts
 
 # Build the ISO
 sudo ./build.sh
@@ -50,7 +50,7 @@ bash scripts/create-vm.sh build/osi-linux-*.iso
 ./launch-vm.sh
 ```
 
-Connect to the VM: `spicy -h 127.0.0.1 -p 5900`
+The SPICE display opens automatically. Clipboard and auto-resize work out of the box.
 
 ### Option 3: Write to USB
 
@@ -71,23 +71,65 @@ sudo dd if=build/osi-linux-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 
 ---
 
+## QEMU/KVM Details
+
+The VM runs with:
+
+| Component | Configuration |
+|-----------|--------------|
+| Machine | q35 + KVM acceleration |
+| CPU/RAM | 4 cores / 2 threads, 8 GB (configurable) |
+| Boot | UEFI (OVMF) |
+| Disk | virtio-scsi, writeback cache, discard |
+| Display | **virtio-gpu** + SPICE with GL acceleration |
+| Clipboard | SPICE vdagent (auto, bidirectional) |
+| Auto-resize | virtio-gpu + udev + xrandr (instant) |
+| Network | virtio-net, SSH forwarded on port 2222 |
+| Audio | intel-hda via SPICE |
+| USB | SPICE USB redirection (2 channels) |
+| Memory | virtio-balloon (dynamic) |
+| Entropy | virtio-rng (no entropy starvation) |
+
+### Environment overrides
+
+```sh
+VM_CORES=8 VM_THREADS=2 VM_RAM=16G ./launch-vm.sh
+DISK_IMAGE=~/VM/custom.qcow2 ./launch-vm.sh
+NO_GL=1 ./launch-vm.sh    # headless host, use: spicy -h 127.0.0.1 -p 5900
+```
+
+### VM troubleshooting
+
+If something breaks inside the guest:
+
+```sh
+fix-display      # re-trigger xrandr auto-resize
+fix-clipboard    # restart spice-vdagent
+```
+
+---
+
 ## Project Structure
 
 ```
 osi-linux/
 ├── build.sh                 Build script (wraps Kali live-build)
-├── launch-vm.sh             QEMU/KVM launcher
+├── launch-vm.sh             QEMU/KVM launcher (virtio-gpu + SPICE)
 ├── config/                  Desktop configs (xfce4, tmux, vim, shell)
 ├── kali-config/
 │   ├── variant-osi/
 │   │   └── package-lists/   Curated package selection
 │   └── common/
 │       ├── hooks/live/      Build-time config hooks
+│       │   ├── 0010-system-config     System tuning + SPICE + virtio-gpu
+│       │   ├── 0015-qemu-guest-fixes  10 QEMU/KVM bug fixes
+│       │   ├── 0020-desktop-setup     XFCE + user + LightDM
+│       │   └── 0030-osi-branding      Branding + wallpaper + cleanup
 │       └── includes.chroot/ Files overlaid into the rootfs
 ├── scripts/
 │   ├── create-vm.sh         Create qcow2 disk + boot installer
 │   └── cleanup-host.sh      Remove build artifacts
-├── wallpaper/               OSI wolf logo
+├── wallpaper/               OSI wallpaper
 └── docs/
 ```
 
@@ -110,16 +152,3 @@ Add hook scripts in `kali-config/common/hooks/live/` — they run inside the chr
 ### Add files to the rootfs
 
 Place files in `kali-config/common/includes.chroot/` — they're overlaid directly onto the filesystem. For example, `includes.chroot/etc/foo.conf` becomes `/etc/foo.conf` in the ISO.
-
----
-
-## QEMU/KVM Details
-
-The VM runs with:
-- KVM acceleration, q35 machine type
-- 8 GB RAM, 4 cores / 2 threads
-- UEFI boot (OVMF)
-- virtio-scsi disk, virtio-net networking
-- SPICE display with clipboard + USB redirect
-- Audio via SPICE (intel-hda)
-- SSH forwarded on host port 2222

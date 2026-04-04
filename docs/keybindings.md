@@ -17,6 +17,23 @@
 | `Alt+Tab` | Switch windows |
 | `Ctrl+Alt+Left/Right` | Switch workspace |
 
+## SPICE / VM
+
+| Binding | Action |
+|---------|--------|
+| `Ctrl+C` / `Ctrl+V` | Copy/paste works between host and guest automatically |
+| Drag SPICE window edge | Guest display auto-resizes |
+
+### VM helper commands (run in guest terminal)
+
+| Command | Action |
+|---------|--------|
+| `fix-display` | Re-trigger xrandr auto-resize |
+| `fix-clipboard` | Restart spice-vdagent |
+| `pbcopy` / `pbpaste` | Copy/paste via xclip |
+| `echo text \| clip` | Pipe to clipboard |
+| `clip -o` | Paste from clipboard |
+
 ## tmux
 
 Prefix is `Ctrl+a`.

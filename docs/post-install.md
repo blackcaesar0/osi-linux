@@ -12,6 +12,11 @@ ip addr show
 # SSH from host
 ssh osi@localhost -p 2222
 
+# Clipboard test — copy text on host, then:
+xclip -selection clipboard -o    # should show host clipboard content
+
+# Display resize — drag the SPICE window edge, guest should follow
+
 # Tools
 nmap --version
 msfconsole --version
@@ -20,6 +25,54 @@ hashcat --version
 python3 --version
 ruby --version
 go version
+```
+
+---
+
+## VM Troubleshooting
+
+### Display stuck at wrong resolution
+
+```sh
+fix-display
+```
+
+Or manually:
+
+```sh
+xrandr --output Virtual-0 --auto
+xrandr --output Virtual-1 --auto    # try alternate output names
+```
+
+### Clipboard not working
+
+```sh
+fix-clipboard
+```
+
+Or manually:
+
+```sh
+# Check if spice-vdagentd is running (system daemon)
+systemctl status spice-vdagentd
+
+# Restart it if needed
+sudo systemctl restart spice-vdagentd
+
+# Check if spice-vdagent is running (user agent)
+pgrep spice-vdagent || spice-vdagent &
+```
+
+### Audio crackling or no sound
+
+PulseAudio is pre-tuned for VM use. If you still hear crackling:
+
+```sh
+# Check audio devices
+pactl list sinks short
+
+# Adjust buffer size
+pulseaudio -k && pulseaudio --start
 ```
 
 ---
