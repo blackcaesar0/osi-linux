@@ -225,14 +225,15 @@ cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/inc
 step "Stage 1/3: Bootstrap"
 lb bootstrap 2>&1 | tee -a "$BUILD_DIR/build.log"
 
-step "Injecting apt config into chroot to tolerate missing repos"
+step "Injecting apt hook to strip non-existent repos from sources.list"
 mkdir -p "$BUILD_DIR/chroot/etc/apt/apt.conf.d"
-cat > "$BUILD_DIR/chroot/etc/apt/apt.conf.d/99ignore-missing-repos" << 'APTEOF'
+cat > "$BUILD_DIR/chroot/etc/apt/apt.conf.d/99strip-updates" << 'APTEOF'
 // Kali rolling has no -updates or -security suites.
-// live-build generates entries for them anyway; let apt continue.
-APT::Update::Error-Mode "any";
+// live-build generates entries for them anyway.  This hook removes
+// those lines from sources.list right before apt-get update runs.
+APT::Update::Pre-Invoke { "sed -i '/-updates/d; /-security/d' /etc/apt/sources.list 2>/dev/null || true"; };
 APTEOF
-echo "    Wrote chroot/etc/apt/apt.conf.d/99ignore-missing-repos"
+echo "    Wrote chroot/etc/apt/apt.conf.d/99strip-updates"
 
 step "Stage 2/3: Chroot (installing packages — this is the slow part)"
 lb chroot 2>&1 | tee -a "$BUILD_DIR/build.log"
