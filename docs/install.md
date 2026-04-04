@@ -5,7 +5,7 @@
 You need a **Debian, Ubuntu, or Kali** host with at least 30 GB free disk space.
 
 ```sh
-sudo apt install git live-build cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts
 ```
 
 If building on a non-Kali host, you also need the Kali archive keyring. The build script installs it automatically, or you can do it manually:
@@ -32,7 +32,7 @@ Options:
 | `--clean` | off | Clean previous build first |
 | `--output <path>` | `build/osi-linux-*.iso` | Custom output path |
 
-Build takes 30–90 minutes depending on bandwidth and CPU. The ISO is a hybrid image (bootable from USB or optical media).
+Build takes 30-90 minutes depending on bandwidth and CPU. The ISO is a hybrid image (bootable from USB or optical media).
 
 ---
 
@@ -44,7 +44,7 @@ Build takes 30–90 minutes depending on bandwidth and CPU. The ISO is a hybrid 
 bash scripts/create-vm.sh build/osi-linux-*.iso
 ```
 
-This creates an 80 GB qcow2 disk at `~/VM/osi-linux.qcow2` and boots the ISO. The SPICE display opens automatically.
+This creates an 80 GB qcow2 disk at `~/VM/osi-linux.qcow2` and boots the ISO.
 
 ### Step 2: Install (or use live session)
 
@@ -61,13 +61,23 @@ After installing and shutting down:
 ./launch-vm.sh
 ```
 
-Connect with a SPICE client:
+The SPICE display opens automatically with GL acceleration. Clipboard and auto-resize work immediately.
+
+### No-GL mode (headless hosts)
+
+If your host has no GPU or GL support:
+
+```sh
+NO_GL=1 ./launch-vm.sh
+```
+
+Then connect manually:
 
 ```sh
 spicy -h 127.0.0.1 -p 5900
 ```
 
-SSH from host:
+### SSH from host
 
 ```sh
 ssh osi@localhost -p 2222
@@ -75,9 +85,16 @@ ssh osi@localhost -p 2222
 
 ### VM resource overrides
 
+```sh
+VM_CORES=8 VM_THREADS=2 VM_RAM=16G ./launch-vm.sh
+DISK_IMAGE=~/VM/custom.qcow2 ./launch-vm.sh
+DISK_SIZE=120G bash scripts/create-vm.sh build/osi-linux-*.iso
+```
+
+---
+
 ## Writing to USB
 
-Example:
 ```sh
 sudo dd if=build/osi-linux-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
@@ -107,23 +124,28 @@ Replace `/dev/sdX` with your USB device (check with `lsblk`).
 
 4. **Check services:**
    ```sh
-   systemctl status ssh
-   systemctl status spice-vdagentd
-   systemctl status qemu-guest-agent
+   systemctl status ssh spice-vdagentd qemu-guest-agent NetworkManager
    ```
 
 ---
 
 ## Verification Checklist
 
-After first boot:
+After first boot, verify:
 
-- XFCE desktop starts with OSI dark theme
-- OSI wolf wallpaper is displayed
-- `Ctrl+Alt+T` opens terminal
-- SPICE clipboard works (copy on host, Ctrl+V in guest)
-- Display auto-resizes when you resize the SPICE window
-- `nmap --version` works
-- `msfconsole` launches Metasploit
-- `python3 --version` shows Python 3.x
-- `ssh osi@localhost -p 2222` from host works
+- [ ] XFCE desktop starts with OSI dark theme
+- [ ] OSI wallpaper is displayed
+- [ ] `Ctrl+Alt+T` opens terminal
+- [ ] SPICE clipboard works (copy on host, Ctrl+V in guest and vice versa)
+- [ ] Display auto-resizes when you resize the SPICE window
+- [ ] `nmap --version` works
+- [ ] `msfconsole` launches Metasploit
+- [ ] `ssh osi@localhost -p 2222` from host works
+- [ ] Audio works (try `speaker-test -t wav -c 2`)
+
+### If something doesn't work
+
+```sh
+fix-display      # re-trigger xrandr (fixes stuck resolution)
+fix-clipboard    # restart spice-vdagent (fixes broken clipboard)
+```

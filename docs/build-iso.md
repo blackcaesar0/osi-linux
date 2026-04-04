@@ -21,7 +21,7 @@ The result is a standard Debian/Kali live ISO that:
 **Host:** Debian 12+, Ubuntu 22.04+, or Kali Linux.
 
 ```sh
-sudo apt install git live-build cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts
 ```
 
 **Disk space:** ~30 GB free (build chroot + squashfs + ISO).
@@ -41,7 +41,7 @@ curl -fsSL https://archive.kali.org/archive-key.asc \
 sudo ./build.sh
 ```
 
-Build time: **30–90 minutes** (mostly downloading packages).
+Build time: **30-90 minutes** (mostly downloading packages).
 
 ### Options
 
@@ -60,6 +60,19 @@ sudo ./build.sh --clean
 ```
 
 The `--clean` flag runs `lb clean --purge` before building.
+
+---
+
+## Build Hooks
+
+The ISO is configured by chroot hooks that run during build. They execute in numeric order:
+
+| Hook | Purpose |
+|------|---------|
+| `0010-system-config` | sysctl, services, virtio-gpu, SPICE resize, GRUB, boot speed |
+| `0015-qemu-guest-fixes` | 10 QEMU/KVM bug fixes (audio, clipboard, DNS, entropy, etc.) |
+| `0020-desktop-setup` | XFCE session, GTK theme, font rendering, LightDM, live user |
+| `0030-osi-branding` | os-release, MOTD, wallpaper generation, clipman, cleanup |
 
 ---
 
@@ -83,18 +96,14 @@ Edit files in `config/` — they're copied into `/etc/skel` so every user gets t
 
 ### Build hooks
 
-Add scripts to `kali-config/common/hooks/live/`. They run inside the chroot during build. Name them with number prefixes for ordering:
-
-- `0010-system-config.hook.chroot` — system-level config
-- `0020-desktop-setup.hook.chroot` — desktop and user setup
-- `0030-osi-branding.hook.chroot` — branding and cleanup
+Add scripts to `kali-config/common/hooks/live/`. They run inside the chroot during build. Name them with number prefixes for ordering (e.g., `0040-my-hook.hook.chroot`).
 
 ### Rootfs overlay
 
 Files in `kali-config/common/includes.chroot/` are copied directly into the filesystem. For example:
 
 ```
-kali-config/common/includes.chroot/etc/motd  →  /etc/motd in the ISO
+kali-config/common/includes.chroot/etc/motd  ->  /etc/motd in the ISO
 ```
 
 ---
@@ -104,12 +113,16 @@ kali-config/common/includes.chroot/etc/motd  →  /etc/motd in the ISO
 Test the ISO in QEMU before writing to USB:
 
 ```sh
+# Quick test (no disk, live session only)
 qemu-system-x86_64 \
     -cdrom build/osi-linux-*.iso \
     -m 4G \
     -enable-kvm \
     -boot d \
-    -device virtio-vga
+    -device virtio-gpu-pci
+
+# Full test with disk and SPICE
+bash scripts/create-vm.sh build/osi-linux-*.iso
 ```
 
 ---
