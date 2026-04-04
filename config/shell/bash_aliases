@@ -61,6 +61,12 @@ alias tn='tmux new-session -s'
 alias tl='tmux list-sessions'
 alias tk='tmux kill-session -t'
 
+# ── Clipboard (works with SPICE host<>guest sharing) ────────────────────────
+alias pbcopy='xclip -selection clipboard'
+alias pbpaste='xclip -selection clipboard -o'
+alias cb='xclip -selection clipboard'
+alias cbp='xclip -selection clipboard -o'
+
 # ── Directory shortcuts ───────────────────────────────────────────────────────
 alias tools='cd ~/tools'
 alias recon='cd ~/tools/recon'
@@ -68,3 +74,7 @@ alias exploit='cd ~/tools/exploitation'
 alias post='cd ~/tools/post-exploitation'
 alias web='cd ~/tools/web'
 alias wordlists='cd ~/tools/wordlists'
+
+# ── VM helpers ────────────────────────────────────────────────────────────────
+alias fix-display='xrandr --output "$(xrandr | grep " connected" | head -1 | awk "{print \$1}")" --auto'
+alias fix-clipboard='killall spice-vdagent 2>/dev/null; sleep 1; spice-vdagent &'

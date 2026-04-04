@@ -56,10 +56,21 @@ fzf
 network-manager
 network-manager-gnome
 
-# ── QEMU/KVM guest integration (clipboard, auto-resize) ─────────────────────
+# ── QEMU/KVM guest integration (clipboard, auto-resize, performance) ────────
 spice-vdagent
 qemu-guest-agent
-xserver-xorg-video-qxl
+xserver-xorg-video-all
+mesa-utils
+libgl1-mesa-dri
+libglx-mesa0
+x11-xserver-utils
+xsel
+arandr
+
+# ── Audio in QEMU (intel-hda via SPICE) ──────────────────────────────────────
+pulseaudio
+pavucontrol
+alsa-utils
 
 # ── Screenshot / screen tools ────────────────────────────────────────────────
 scrot
@@ -205,6 +216,8 @@ zip
 rsync
 ntpdate
 ca-certificates
+acpi
+acpid
 
 # ── PDF viewer ────────────────────────────────────────────────────────────────
 zathura
