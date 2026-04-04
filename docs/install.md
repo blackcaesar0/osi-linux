@@ -118,11 +118,11 @@ Replace `/dev/sdX` with your USB device (check with `lsblk`).
 
 After first boot:
 
-- awesome WM starts with cyberpunk theme (dark + cyan)
+- XFCE desktop starts with OSI dark theme
 - OSI wolf wallpaper is displayed
-- `Win+Return` opens alacritty
-- `Win+d` opens rofi launcher
-- SPICE clipboard works (copy on host, Ctrl+Shift+V in guest)
+- `Ctrl+Alt+T` opens terminal
+- SPICE clipboard works (copy on host, Ctrl+V in guest)
+- Display auto-resizes when you resize the SPICE window
 - `nmap --version` works
 - `msfconsole` launches Metasploit
 - `python3 --version` shows Python 3.x

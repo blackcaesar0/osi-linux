@@ -57,7 +57,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
     echo "ERROR: Missing required tools: ${MISSING[*]}"
     echo ""
     echo "Install prerequisites:"
-    echo "  Debian/Ubuntu/Kali: sudo apt install git live-build cdebootstrap devscripts"
+    echo "  Debian/Ubuntu/Kali: sudo apt install git live-build simple-cdd cdebootstrap devscripts"
     echo ""
     echo "If not on Kali, you also need the Kali archive keyring:"
     echo "  curl -fsSL https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg"
@@ -90,27 +90,32 @@ if [ -n "$DO_CLEAN" ]; then
 fi
 
 # ── Assemble includes.chroot from config/ ─────────────────────────────────────
-# Copy our desktop configs into the skel overlay so every new user gets them
+# Copy desktop configs into the skel overlay so every new user gets them
 step "Assembling rootfs overlay from config/"
-SKEL="$PROJECT_DIR/kali-config/common/includes.chroot/etc/skel"
+INCLUDES="$PROJECT_DIR/kali-config/common/includes.chroot"
+SKEL="$INCLUDES/etc/skel"
 
-# awesome WM
-cp "$PROJECT_DIR/config/awesome/rc.lua"           "$SKEL/.config/awesome/"
-cp "$PROJECT_DIR/config/awesome/theme.lua"         "$SKEL/.config/awesome/"
+# Create skel directory structure
+mkdir -p "$SKEL/.config/xfce4/terminal" \
+         "$SKEL/.config/xfce4/xfconf/xfce-perchannel-xml" \
+         "$SKEL/.config/gtk-3.0" \
+         "$SKEL/.config/gtk-4.0" \
+         "$SKEL/wallpaper"
 
-# Terminal, launcher, compositor
-cp "$PROJECT_DIR/config/alacritty/alacritty.toml"  "$SKEL/.config/alacritty/"
-cp "$PROJECT_DIR/config/rofi/osi.rasi"             "$SKEL/.config/rofi/"
-cp "$PROJECT_DIR/config/picom/picom.conf"          "$SKEL/.config/picom/"
+# XFCE configs
+cp "$PROJECT_DIR/config/xfce4/terminal/terminalrc" "$SKEL/.config/xfce4/terminal/"
+cp "$PROJECT_DIR/config/xfce4/xfconf/xfce-perchannel-xml/"*.xml \
+    "$SKEL/.config/xfce4/xfconf/xfce-perchannel-xml/"
 
 # Shell, editor, multiplexer
 cp "$PROJECT_DIR/config/shell/bash_aliases"        "$SKEL/.bash_aliases"
 cp "$PROJECT_DIR/config/vim/vimrc"                 "$SKEL/.vimrc"
 cp "$PROJECT_DIR/config/tmux/tmux.conf"            "$SKEL/.tmux.conf"
 
-# Wallpaper
+# Wallpaper — into skel and system-wide backgrounds
 cp "$PROJECT_DIR/wallpaper/osi.png"                "$SKEL/wallpaper/"
-cp "$PROJECT_DIR/wallpaper/osi.png"                "$PROJECT_DIR/kali-config/common/includes.chroot/usr/share/backgrounds/osi/"
+mkdir -p "$INCLUDES/usr/share/backgrounds/osi"
+cp "$PROJECT_DIR/wallpaper/osi.png"                "$INCLUDES/usr/share/backgrounds/osi/"
 
 # ── lb config ─────────────────────────────────────────────────────────────────
 step "Configuring live-build"

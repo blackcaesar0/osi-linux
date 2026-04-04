@@ -75,10 +75,8 @@ Edit files in `config/` — they're copied into `/etc/skel` so every user gets t
 
 | Config file | Destination in ISO |
 |---|---|
-| `config/awesome/rc.lua` | `/etc/skel/.config/awesome/rc.lua` |
-| `config/alacritty/alacritty.toml` | `/etc/skel/.config/alacritty/alacritty.toml` |
-| `config/rofi/osi.rasi` | `/etc/skel/.config/rofi/osi.rasi` |
-| `config/picom/picom.conf` | `/etc/skel/.config/picom/picom.conf` |
+| `config/xfce4/terminal/terminalrc` | `/etc/skel/.config/xfce4/terminal/terminalrc` |
+| `config/xfce4/xfconf/xfce-perchannel-xml/*.xml` | `/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/` |
 | `config/tmux/tmux.conf` | `/etc/skel/.tmux.conf` |
 | `config/vim/vimrc` | `/etc/skel/.vimrc` |
 | `config/shell/bash_aliases` | `/etc/skel/.bash_aliases` |
