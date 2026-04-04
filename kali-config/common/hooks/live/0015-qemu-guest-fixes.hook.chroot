@@ -1,56 +1,194 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# OSI Linux — QEMU/KVM guest fixes
-# Fixes known issues with Kali + XFCE running as a QEMU/KVM guest.
+# OSI Linux — QEMU/KVM + SPICE guest fixes
+#
+# Covers:
+#   - SPICE auto-resize without logout (real-time, udev + user service)
+#   - Clipboard sync (host ↔ guest via spice-vdagent)
+#   - virtio-gpu modesetting driver
+#   - Audio fix for intel-hda in QEMU
+#   - Network/DNS fix (mask systemd-resolved)
+#   - Docker overlay2 config
+#   - Journal size limit
+#   - Disable VM-useless services
+#   - Tablet mouse fix
+#   - fix-display / fix-clipboard helper commands
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-echo "[OSI] Applying QEMU/KVM guest fixes..."
+echo "[OSI] Applying QEMU/KVM + SPICE fixes..."
 
-# ── Fix 1: spice-vdagentd socket directory ───────────────────────────────────
-# Without this, spice-vdagent fails silently and clipboard doesn't work.
+# ── spice-vdagentd socket dir ─────────────────────────────────────────────────
 mkdir -p /run/spice-vdagentd
 mkdir -p /etc/tmpfiles.d
 cat > /etc/tmpfiles.d/spice-vdagentd.conf << 'EOF'
 d /run/spice-vdagentd 0755 root root -
 EOF
 
-# Harden spice-vdagentd service
+# Keep vdagentd alive — it dies on virtio-serial disconnect in some QEMU builds
 mkdir -p /etc/systemd/system/spice-vdagentd.service.d
 cat > /etc/systemd/system/spice-vdagentd.service.d/override.conf << 'EOF'
 [Unit]
 ConditionPathExists=
 
 [Service]
-Restart=on-failure
+Restart=always
 RestartSec=2
 EOF
 
-# ── Fix 2: virtio-gpu kernel module settings ─────────────────────────────────
+# ── SPICE auto-resize — real-time, no logout needed ──────────────────────────
+#
+# Flow: SPICE window resize → DRM mode change → udev rule fires →
+#       systemd user service → xrandr --auto on the running X session.
+#
+# The user spice-vdagent process (started via XDG autostart on login) handles
+# the SPICE channel. The udev rule below is a belt-and-suspenders fallback
+# that works even if spice-vdagent misses the event.
+
+cat > /usr/local/bin/osi-resize << 'SCRIPT'
+#!/bin/bash
+# Called by udev on DRM change and available as a manual command.
+# Finds the active X session (works with lightdm/gdm/startx) and runs xrandr.
+set -euo pipefail
+
+find_x_session() {
+    # Search all processes for an X session user environment
+    for pid in $(pgrep -x Xorg 2>/dev/null; pgrep -x X 2>/dev/null); do
+        local env_file="/proc/$pid/environ"
+        [ -r "$env_file" ] || continue
+        local disp uid xauth
+        disp=$(tr '\0' '\n' < "$env_file" 2>/dev/null | grep '^DISPLAY=' | head -1 | cut -d= -f2-)
+        uid=$(stat -c %u "$env_file" 2>/dev/null)
+        xauth=$(tr '\0' '\n' < "$env_file" 2>/dev/null | grep '^XAUTHORITY=' | head -1 | cut -d= -f2-)
+        if [ -n "$disp" ] && [ -n "$uid" ]; then
+            echo "$uid $disp $xauth"
+            return 0
+        fi
+    done
+    return 1
+}
+
+apply_resize() {
+    local uid disp xauth
+    read -r uid disp xauth <<< "$1"
+    local xargs=()
+    [ -n "$xauth" ] && xargs+=( env XAUTHORITY="$xauth" )
+    # Try all common virtio-gpu output names
+    for out in Virtual-0 Virtual0 VGA-0 VGA0 HDMI-0; do
+        if "${xargs[@]:-}" xrandr --display "$disp" --output "$out" --auto 2>/dev/null; then
+            return 0
+        fi
+    done
+    # Fallback: auto-detect connected output
+    local connected
+    connected=$( "${xargs[@]:-}" xrandr --display "$disp" 2>/dev/null \
+        | awk '/ connected/{print $1; exit}' )
+    if [ -n "$connected" ]; then
+        "${xargs[@]:-}" xrandr --display "$disp" --output "$connected" --auto 2>/dev/null || true
+    fi
+}
+
+SESSION=$(find_x_session) || { echo "No X session found"; exit 0; }
+read -r UID_ DISP XAUTH <<< "$SESSION"
+
+# Run as the session user if we are root
+if [ "$(id -u)" -eq 0 ] && [ "$UID_" -ne 0 ]; then
+    exec su - "$(id -un "$UID_")" -c \
+        "DISPLAY=$DISP ${XAUTH:+XAUTHORITY=$XAUTH} xrandr --auto 2>/dev/null || true"
+else
+    DISPLAY="$DISP" ${XAUTH:+XAUTHORITY="$XAUTH"} xrandr --auto 2>/dev/null || true
+fi
+SCRIPT
+chmod +x /usr/local/bin/osi-resize
+
+# Systemd service wrapper (runs as root, su-s to the session user)
+cat > /etc/systemd/system/osi-resize.service << 'EOF'
+[Unit]
+Description=OSI SPICE Display Auto-Resize
+After=graphical.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 0.3
+ExecStart=/usr/local/bin/osi-resize
+EOF
+
+# udev: trigger on any DRM connector change (virtio-gpu resize event)
+mkdir -p /etc/udev/rules.d
+cat > /etc/udev/rules.d/99-osi-spice-resize.rules << 'EOF'
+ACTION=="change", SUBSYSTEM=="drm", RUN+="/usr/bin/systemctl start --no-block osi-resize.service"
+EOF
+
+# XDG autostart — starts spice-vdagent AND triggers xrandr when session opens
+mkdir -p /etc/xdg/autostart
+
+cat > /etc/xdg/autostart/spice-vdagent.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=SPICE vdagent
+Comment=SPICE guest agent — clipboard and display resize
+Exec=/usr/bin/spice-vdagent
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true
+X-systemd-skip=false
+EOF
+
+# Startup resize: apply correct resolution as soon as the session opens.
+# Tries multiple times with increasing delay to handle slow SPICE negotiation.
+cat > /etc/xdg/autostart/osi-startup-resize.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=OSI Startup Resize
+Comment=Apply correct display resolution on login
+Exec=sh -c "for d in 1 2 3; do sleep $d; xrandr --auto 2>/dev/null; done &"
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true
+EOF
+
+# ── virtio-gpu: force modesetting driver, enable modeset ─────────────────────
 cat > /etc/modprobe.d/virtio-gpu.conf << 'EOF'
 options virtio_gpu modeset=1
 EOF
 
-# ── Fix 3: Mouse cursor disappears or gets stuck ────────────────────────────
-cat > /etc/udev/rules.d/98-osi-tablet.rules << 'EOF'
-ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="QEMU QEMU USB Tablet", RUN+="/usr/bin/xdotool mousemove 960 540"
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/10-virtio-gpu.conf << 'EOF'
+Section "Device"
+    Identifier  "virtio-gpu"
+    Driver      "modesetting"
+    Option      "AccelMethod"  "glamor"
+    Option      "DRI"          "3"
+EndSection
+
+Section "Screen"
+    Identifier "Default Screen"
+    Device     "virtio-gpu"
+    DefaultDepth 24
+    SubSection "Display"
+        Depth 24
+        Virtual 3840 2160
+    EndSubSection
+EndSection
 EOF
 
-# ── Fix 4: Audio crackling with intel-hda in QEMU ───────────────────────────
+# ── Audio: fix crackling with intel-hda in QEMU ───────────────────────────────
 mkdir -p /etc/pulse
 cat > /etc/pulse/daemon.conf << 'EOF'
-default-sample-format = s16le
-default-sample-rate = 48000
-default-sample-channels = 2
-default-fragments = 8
+default-sample-format    = s16le
+default-sample-rate      = 48000
+default-sample-channels  = 2
+default-fragments        = 8
 default-fragment-size-msec = 10
-resample-method = speex-float-3
-enable-remixing = yes
-flat-volumes = no
-avoid-resampling = yes
+resample-method          = speex-float-3
+enable-remixing          = yes
+flat-volumes             = no
+avoid-resampling         = yes
 EOF
 
-# ── Fix 5: Console font too small in large SPICE window ─────────────────────
+# ── Console font: readable in large SPICE windows ────────────────────────────
 cat > /etc/default/console-setup << 'EOF'
 CHARMAP="UTF-8"
 CODESET="Lat15"
@@ -58,60 +196,113 @@ FONTFACE="TerminusBold"
 FONTSIZE="16x32"
 EOF
 
-# ── Fix 6: systemd-resolved conflicts with NetworkManager DNS ────────────────
+# ── DNS: mask systemd-resolved, use static resolv.conf ───────────────────────
+# systemd-resolved conflicts with NetworkManager DNS on Kali and causes
+# intermittent DNS failures when VPN tools change /etc/resolv.conf.
 systemctl mask systemd-resolved.service 2>/dev/null || true
 rm -f /etc/resolv.conf
 cat > /etc/resolv.conf << 'EOF'
 nameserver 8.8.8.8
 nameserver 1.1.1.1
+nameserver 9.9.9.9
+EOF
+# Lock it so nothing overwrites it at boot
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
+# ── NetworkManager: manage ALL interfaces (eth, wifi, vpn) ───────────────────
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/10-osi.conf << 'EOF'
+[main]
+dns=none
+systemd-resolved=false
+plugins=ifupdown,keyfile
+
+[ifupdown]
+managed=true
+
+[keyfile]
+unmanaged-devices=none
+
+[device]
+wifi.scan-rand-mac-address=yes
 EOF
 
-# ── Fix 7: Docker overlay2 for VM ───────────────────────────────────────────
+# ── Docker: overlay2 storage, sane log limits ────────────────────────────────
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json << 'EOF'
 {
     "storage-driver": "overlay2",
     "log-driver": "json-file",
-    "log-opts": {
-        "max-size": "10m",
-        "max-file": "3"
-    },
+    "log-opts": { "max-size": "10m", "max-file": "3" },
     "dns": ["8.8.8.8", "1.1.1.1"]
 }
 EOF
 
-# ── Fix 8: journald — limit log size ────────────────────────────────────────
+# ── Journal: cap size so disk doesn't fill up ─────────────────────────────────
 mkdir -p /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/osi.conf << 'EOF'
 [Journal]
-SystemMaxUse=100M
-SystemMaxFileSize=25M
-MaxRetentionSec=1week
+SystemMaxUse=200M
+SystemMaxFileSize=50M
+MaxRetentionSec=2weeks
 Compress=yes
 EOF
 
-# ── Fix 9: Disable useless services in VM ────────────────────────────────────
+# ── Disable services useless in a VM ─────────────────────────────────────────
 for svc in \
     bluetooth.service \
     ModemManager.service \
     pppd-dns.service \
     wpa_supplicant.service \
+    avahi-daemon.service \
+    avahi-daemon.socket \
+    cups.service \
+    cups-browsed.service \
+    colord.service \
+    geoclue.service \
+    switcheroo-control.service \
     ; do
     systemctl disable "$svc" 2>/dev/null || true
+    systemctl mask    "$svc" 2>/dev/null || true
 done
 
-# ── Fix 10: Clipboard helper ────────────────────────────────────────────────
+# ── Mouse: prevent cursor freeze on QEMU USB tablet ──────────────────────────
+cat > /etc/udev/rules.d/98-osi-tablet.rules << 'EOF'
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="QEMU QEMU USB Tablet", TAG+="uaccess"
+EOF
+
+# ── Helper commands ───────────────────────────────────────────────────────────
+# fix-display: manually trigger display resize (run from terminal if SPICE resize stalls)
+cat > /usr/local/bin/fix-display << 'SCRIPT'
+#!/bin/bash
+echo "Triggering display resize..."
+xrandr --auto 2>/dev/null && echo "Done." || echo "xrandr failed — is X running?"
+SCRIPT
+chmod +x /usr/local/bin/fix-display
+
+# fix-clipboard: restart spice-vdagent if clipboard stops working
+cat > /usr/local/bin/fix-clipboard << 'SCRIPT'
+#!/bin/bash
+echo "Restarting SPICE vdagent..."
+pkill spice-vdagent 2>/dev/null || true
+sleep 0.5
+spice-vdagent &
+echo "Done. Try copy/paste now."
+SCRIPT
+chmod +x /usr/local/bin/fix-clipboard
+
+# clip: pipe to/from clipboard
 cat > /usr/local/bin/clip << 'SCRIPT'
 #!/bin/bash
-if [ "$1" = "-o" ] || [ "$1" = "--paste" ]; then
+if [ "$#" -gt 0 ] && [ "$1" = "-o" ]; then
     xclip -selection clipboard -o
 elif [ ! -t 0 ]; then
     xclip -selection clipboard
 else
-    echo "Usage: echo text | clip     # copy"
-    echo "       clip -o              # paste"
+    echo "Usage: echo text | clip      # copy to clipboard"
+    echo "       clip -o               # paste from clipboard"
 fi
 SCRIPT
 chmod +x /usr/local/bin/clip
 
-echo "[OSI] QEMU/KVM guest fixes applied."
+echo "[OSI] QEMU/KVM + SPICE fixes applied."

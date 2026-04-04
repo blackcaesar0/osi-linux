@@ -125,21 +125,34 @@ else
 fi
 
 # ── Display — virtio-gpu + SPICE ────────────────────────────────────────────
-# virtio-gpu (not QXL!) is required for proper auto-resize and GL.
+# virtio-gpu-pci: correct for SPICE auto-resize. Do NOT use QXL (unmaintained,
+# no DRI3, broken resize on kernel 6.x).
+#
+# gl=on requires Mesa EGL (AMD/Intel). On NVIDIA proprietary drivers, QEMU's
+# virgl backend fails at "egl realize failed: failed to init egl surface"
+# because NVIDIA EGL doesn't expose a Mesa-compatible DRM rendernode.
+# Default: spice-app without gl=on — works on all hosts, auto-opens the viewer.
+# Set GL=1 only if you have AMD/Intel GPU with Mesa drivers.
+GL="${GL:-0}"
+
 QEMU_ARGS+=( -device virtio-gpu-pci )
 
 if [ "$NO_GL" = "1" ]; then
-    # No-GL mode: manual SPICE client connection
+    # Headless mode: daemonize, connect manually with spicy or remote-viewer
     QEMU_ARGS+=(
         -spice port=5900,addr=127.0.0.1,disable-ticketing=on
         -daemonize
         -pidfile "$PIDFILE"
     )
-    DISPLAY_MODE="SPICE (no GL)"
-else
-    # GL mode: SPICE app opens automatically with GPU acceleration
+    DISPLAY_MODE="SPICE port 5900 (headless)"
+elif [ "$GL" = "1" ]; then
+    # GL mode: virgl 3D acceleration — AMD/Intel Mesa hosts only
     QEMU_ARGS+=( -display spice-app,gl=on )
-    DISPLAY_MODE="virtio-gpu + SPICE (GL)"
+    DISPLAY_MODE="virtio-gpu + SPICE (GL/virgl)"
+else
+    # Default: SPICE auto-open, no GL — works on any host including NVIDIA
+    QEMU_ARGS+=( -display spice-app )
+    DISPLAY_MODE="virtio-gpu + SPICE"
 fi
 
 # ── SPICE agent channel (clipboard + resize events) ─────────────────────────
