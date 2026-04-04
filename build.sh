@@ -214,32 +214,54 @@ cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$BUILD_DIR/config
 # Rootfs overlay (configs, skel, sysctl, etc.)
 cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/" 2>/dev/null || true
 
-# ── Build (staged) ────────────────────────────────────────────────────────────
-# We split lb build into bootstrap → chroot → binary so we can inject an apt
-# config into the chroot between stages.  live-build's lb_chroot_archives
-# generates a sources.list entry for kali-rolling-updates (which 404s) and
-# none of the LB_UPDATES patches reach its internal logic.  By writing the
-# apt.conf.d file directly into the bootstrapped chroot BEFORE lb chroot runs,
-# apt-get update will treat the 404 as a warning, not an error.
+# ── Build ─────────────────────────────────────────────────────────────────────
+# live-build's lb_chroot_archives generates a sources.list entry for
+# kali-rolling-updates (which 404s).  No config-file patch survives because
+# live-build regenerates everything.  Fix: a background watcher on the HOST
+# filesystem strips the -updates line from chroot/etc/apt/sources.list the
+# instant it appears — before apt-get update inside the chroot reads it.
 
-step "Stage 1/3: Bootstrap"
-lb bootstrap 2>&1 | tee -a "$BUILD_DIR/build.log"
+SOURCES_LIST="$BUILD_DIR/chroot/etc/apt/sources.list"
 
-step "Injecting apt hook to strip non-existent repos from sources.list"
-mkdir -p "$BUILD_DIR/chroot/etc/apt/apt.conf.d"
-cat > "$BUILD_DIR/chroot/etc/apt/apt.conf.d/99strip-updates" << 'APTEOF'
-// Kali rolling has no -updates or -security suites.
-// live-build generates entries for them anyway.  This hook removes
-// those lines from sources.list right before apt-get update runs.
-APT::Update::Pre-Invoke { "sed -i '/-updates/d; /-security/d' /etc/apt/sources.list 2>/dev/null || true"; };
-APTEOF
-echo "    Wrote chroot/etc/apt/apt.conf.d/99strip-updates"
+# Start a background watcher that strips -updates/-security from sources.list
+# whenever it is (re)written.  Uses inotifywait if available, else tight poll.
+(
+    trap 'exit 0' TERM
+    strip_updates() {
+        if [ -f "$SOURCES_LIST" ] && grep -q '\-updates\|\-security' "$SOURCES_LIST" 2>/dev/null; then
+            sed -i '/-updates/d; /-security/d' "$SOURCES_LIST" 2>/dev/null || true
+        fi
+    }
+    if command -v inotifywait &>/dev/null; then
+        # Efficient: react to file writes via inotify
+        while true; do
+            inotifywait -qq -e modify,create -t 600 \
+                "$(dirname "$SOURCES_LIST")" 2>/dev/null || true
+            strip_updates
+        done
+    else
+        # Fallback: poll every 0.2 seconds
+        while true; do
+            strip_updates
+            sleep 0.2
+        done
+    fi
+) &
+WATCHER_PID=$!
+echo "    Started sources.list watcher (PID $WATCHER_PID)"
 
-step "Stage 2/3: Chroot (installing packages — this is the slow part)"
-lb chroot 2>&1 | tee -a "$BUILD_DIR/build.log"
+step "Building ISO (this will take 30-90 minutes depending on bandwidth and CPU)"
+lb build 2>&1 | tee "$BUILD_DIR/build.log"
+BUILD_RC=${PIPESTATUS[0]}
 
-step "Stage 3/3: Binary (assembling ISO)"
-lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
+# Stop the watcher
+kill "$WATCHER_PID" 2>/dev/null || true
+wait "$WATCHER_PID" 2>/dev/null || true
+
+if [ "$BUILD_RC" -ne 0 ]; then
+    echo "ERROR: lb build exited with code $BUILD_RC — check build.log"
+    exit "$BUILD_RC"
+fi
 
 # ── Output ────────────────────────────────────────────────────────────────────
 # Find the built ISO — name depends on live-build version and --image-name support
