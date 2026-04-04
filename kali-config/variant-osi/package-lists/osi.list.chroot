@@ -25,7 +25,7 @@ fonts-noto
 fonts-noto-color-emoji
 papirus-icon-theme
 kali-themes
-kali-wallpapers
+# kali-wallpapers removed — no longer packaged; branding hook generates wallpaper
 dbus-x11
 xdg-utils
 
@@ -155,7 +155,6 @@ wordlists
 # ── Pentest: Exploitation ────────────────────────────────────────────────────
 metasploit-framework
 exploitdb
-searchsploit
 
 # ── Pentest: Wireless (useful even in VMs for USB passthrough) ────────────────
 aircrack-ng
@@ -187,7 +186,7 @@ gdb-peda
 radare2
 binwalk
 foremost
-volatility3
+# volatility3 removed — not in current kali-rolling; install via pip if needed
 
 # ── Networking & Infrastructure ───────────────────────────────────────────────
 openssh-client
@@ -214,7 +213,7 @@ p7zip-full
 unzip
 zip
 rsync
-ntpdate
+ntpsec-ntpdate
 ca-certificates
 acpi
 acpid
