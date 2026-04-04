@@ -53,11 +53,15 @@ MISSING=()
 for cmd in lb debootstrap curl; do
     command -v "$cmd" &>/dev/null || MISSING+=("$cmd")
 done
+# isolinux is needed by lb_binary_syslinux to create bootable ISOs
+for pkg in isolinux syslinux-common; do
+    dpkg -s "$pkg" &>/dev/null || MISSING+=("$pkg")
+done
 if [ "${#MISSING[@]}" -gt 0 ]; then
-    echo "ERROR: Missing required tools: ${MISSING[*]}"
+    echo "ERROR: Missing required tools/packages: ${MISSING[*]}"
     echo ""
     echo "Install prerequisites:"
-    echo "  Debian/Ubuntu/Kali: sudo apt install git live-build simple-cdd cdebootstrap devscripts"
+    echo "  sudo apt install git live-build simple-cdd cdebootstrap devscripts isolinux syslinux-common"
     echo ""
     echo "If not on Kali, you also need the Kali archive keyring:"
     echo "  curl -fsSL https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg"
