@@ -10,12 +10,12 @@
       <property name="length" type="uint" value="100"/>
       <property name="position-locked" type="bool" value="true"/>
       <property name="icon-size" type="uint" value="16"/>
-      <property name="size" type="uint" value="28"/>
+      <property name="size" type="uint" value="30"/>
       <property name="background-style" type="uint" value="1"/>
       <property name="background-color" type="array">
-        <value type="uint" value="10"/>
-        <value type="uint" value="10"/>
-        <value type="uint" value="15"/>
+        <value type="uint" value="2827"/>
+        <value type="uint" value="3601"/>
+        <value type="uint" value="5140"/>
         <value type="uint" value="65535"/>
       </property>
       <property name="plugin-ids" type="array">
@@ -33,11 +33,24 @@
     </property>
   </property>
   <property name="plugins" type="empty">
-    <property name="plugin-1" type="string" value="applicationsmenu">
+    <property name="plugin-1" type="string" value="whiskermenu">
       <property name="show-button-title" type="bool" value="true"/>
-      <property name="button-title" type="string" value="OSI"/>
-      <property name="button-icon" type="string" value="/usr/share/backgrounds/osi/osi.png"/>
-      <property name="small" type="bool" value="false"/>
+      <property name="show-button-icon" type="bool" value="true"/>
+      <property name="button-title" type="string" value="(OSI)"/>
+      <property name="button-icon" type="string" value="/usr/share/pixmaps/osi-menu.png"/>
+      <property name="launcher-show-name" type="bool" value="true"/>
+      <property name="launcher-show-description" type="bool" value="true"/>
+      <property name="launcher-show-tooltip" type="bool" value="true"/>
+      <property name="view-mode" type="int" value="2"/>
+      <property name="default-category" type="int" value="2"/>
+      <property name="menu-width" type="int" value="520"/>
+      <property name="menu-height" type="int" value="620"/>
+      <property name="menu-opacity" type="int" value="100"/>
+      <property name="sort-categories" type="bool" value="true"/>
+      <property name="category-show-name" type="bool" value="true"/>
+      <property name="position-categories-horizontal" type="bool" value="false"/>
+      <property name="favorites" type="array">
+      </property>
     </property>
     <property name="plugin-2" type="string" value="tasklist">
       <property name="grouping" type="uint" value="1"/>

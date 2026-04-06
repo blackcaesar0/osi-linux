@@ -1,6 +1,6 @@
 # OSI Linux
 
-A custom Kali-based distribution built for penetration testing and offensive security operations. Runs as a QEMU/KVM virtual machine with full SPICE integration, or boots from USB.
+OSI stands for **(OSI) Offensive Security Initiative**. This is a custom Kali-based distribution built for penetration testing and offensive security operations. Runs as a QEMU/KVM virtual machine with full SPICE integration, or boots from USB.
 
 XFCE desktop with OSI team branding, curated tool selection, copy/paste and auto-resize working out of the box.
 

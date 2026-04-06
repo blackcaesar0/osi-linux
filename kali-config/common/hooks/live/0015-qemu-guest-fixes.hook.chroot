@@ -91,10 +91,15 @@ apply_resize() {
 SESSION=$(find_x_session) || { echo "No X session found"; exit 0; }
 read -r UID_ DISP XAUTH <<< "$SESSION"
 
-# Run as the session user if we are root
-if [ "$(id -u)" -eq 0 ] && [ "$UID_" -ne 0 ]; then
-    exec su - "$(id -un "$UID_")" -c \
-        "DISPLAY=$DISP ${XAUTH:+XAUTHORITY=$XAUTH} xrandr --auto 2>/dev/null || true"
+# Run as the session user if we are root (runuser keeps DISPLAY/XAUTHORITY; su - login shell does not)
+if [ "$(id -u)" -eq 0 ] && [ "${UID_:-0}" -ne 0 ]; then
+    u="$(id -nu "$UID_" 2>/dev/null)" || exit 0
+    [ -n "$u" ] || exit 0
+    if [ -n "$XAUTH" ]; then
+        runuser -u "$u" -- env DISPLAY="$DISP" XAUTHORITY="$XAUTH" xrandr --auto 2>/dev/null || true
+    else
+        runuser -u "$u" -- env DISPLAY="$DISP" xrandr --auto 2>/dev/null || true
+    fi
 else
     DISPLAY="$DISP" ${XAUTH:+XAUTHORITY="$XAUTH"} xrandr --auto 2>/dev/null || true
 fi
@@ -196,32 +201,23 @@ FONTFACE="TerminusBold"
 FONTSIZE="16x32"
 EOF
 
-# ── DNS: mask systemd-resolved, use static resolv.conf ───────────────────────
-# systemd-resolved conflicts with NetworkManager DNS on Kali and causes
-# intermittent DNS failures when VPN tools change /etc/resolv.conf.
-systemctl mask systemd-resolved.service 2>/dev/null || true
+# ── DNS / NetworkManager (VPN- and captive-portal-friendly) ─────────────────
+# Do not use chattr +i or static public DNS in /etc/resolv.conf — that breaks
+# VPN-provided DNS and many enterprise networks. Let NetworkManager refresh
+# resolv.conf per connection instead of fighting systemd-resolved.
+systemctl unmask systemd-resolved.service 2>/dev/null || true
 rm -f /etc/resolv.conf
-cat > /etc/resolv.conf << 'EOF'
-nameserver 8.8.8.8
-nameserver 1.1.1.1
-nameserver 9.9.9.9
-EOF
-# Lock it so nothing overwrites it at boot
-chattr +i /etc/resolv.conf 2>/dev/null || true
 
-# ── NetworkManager: manage ALL interfaces (eth, wifi, vpn) ───────────────────
+# ── NetworkManager: manage interfaces; NM writes resolv.conf when dns=auto ─────
 mkdir -p /etc/NetworkManager/conf.d
 cat > /etc/NetworkManager/conf.d/10-osi.conf << 'EOF'
 [main]
-dns=none
+dns=auto
 systemd-resolved=false
-plugins=ifupdown,keyfile
+plugins=keyfile
 
 [ifupdown]
 managed=true
-
-[keyfile]
-unmanaged-devices=none
 
 [device]
 wifi.scan-rand-mac-address=yes
@@ -275,6 +271,8 @@ EOF
 # fix-display: manually trigger display resize (run from terminal if SPICE resize stalls)
 cat > /usr/local/bin/fix-display << 'SCRIPT'
 #!/bin/bash
+export DISPLAY="${DISPLAY:-:0}"
+[[ -z "${XAUTHORITY:-}" && -f "$HOME/.Xauthority" ]] && export XAUTHORITY="$HOME/.Xauthority"
 echo "Triggering display resize..."
 xrandr --auto 2>/dev/null && echo "Done." || echo "xrandr failed — is X running?"
 SCRIPT
@@ -283,10 +281,13 @@ chmod +x /usr/local/bin/fix-display
 # fix-clipboard: restart spice-vdagent if clipboard stops working
 cat > /usr/local/bin/fix-clipboard << 'SCRIPT'
 #!/bin/bash
+export DISPLAY="${DISPLAY:-:0}"
+[[ -z "${XAUTHORITY:-}" && -f "$HOME/.Xauthority" ]] && export XAUTHORITY="$HOME/.Xauthority"
 echo "Restarting SPICE vdagent..."
-pkill spice-vdagent 2>/dev/null || true
+pkill -x spice-vdagent 2>/dev/null || true
 sleep 0.5
-spice-vdagent &
+nohup spice-vdagent >/dev/null 2>&1 &
+disown 2>/dev/null || true
 echo "Done. Try copy/paste now."
 SCRIPT
 chmod +x /usr/local/bin/fix-clipboard

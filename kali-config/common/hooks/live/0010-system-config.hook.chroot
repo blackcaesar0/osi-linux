@@ -2,8 +2,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # OSI Linux — System configuration hook
 # Runs inside the chroot during ISO build.
-# Configures kernel params, services, SPICE integration (clipboard + resize),
-# and QEMU/KVM guest optimizations.
+# Configures kernel params, core services, and VM-oriented defaults.
+# SPICE / virtio-gpu / clipboard / auto-resize live in 0015-qemu-guest-fixes.
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -66,70 +66,6 @@ virtio_console
 virtio_input
 EOF
 
-# ── X11 config — use modesetting driver for virtio-gpu ───────────────────────
-# modesetting + glamor is better than QXL for auto-resize and GL acceleration.
-# QXL is legacy and causes resolution issues in modern QEMU (2024+).
-mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/10-virtio-gpu.conf << 'EOF'
-Section "Device"
-    Identifier "virtio-gpu"
-    Driver     "modesetting"
-    Option     "AccelMethod" "glamor"
-EndSection
-
-Section "Screen"
-    Identifier "Default Screen"
-    Device     "virtio-gpu"
-    DefaultDepth 24
-    SubSection "Display"
-        Depth 24
-        Virtual 3840 2160
-    EndSubSection
-EndSection
-EOF
-
-# ── SPICE auto-resize script ─────────────────────────────────────────────────
-# Triggered by udev when DRM card mode changes (SPICE window resize).
-mkdir -p /usr/local/bin
-cat > /usr/local/bin/osi-display-resize << 'SCRIPT'
-#!/bin/bash
-# Detect and apply new resolution from SPICE client resize.
-export DISPLAY="${DISPLAY:-:0}"
-
-# Find the active X session user
-for pid in $(pgrep -x xfce4-session 2>/dev/null || pgrep -x Xorg 2>/dev/null); do
-    USER_DISPLAY=$(tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep '^DISPLAY=' | head -1 | cut -d= -f2)
-    USER_XAUTH=$(tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep '^XAUTHORITY=' | head -1 | cut -d= -f2)
-    if [ -n "$USER_DISPLAY" ]; then
-        export DISPLAY="$USER_DISPLAY"
-        [ -n "$USER_XAUTH" ] && export XAUTHORITY="$USER_XAUTH"
-        break
-    fi
-done
-
-sleep 0.3
-OUTPUT=$(xrandr 2>/dev/null | grep ' connected' | head -1 | awk '{print $1}')
-[ -n "$OUTPUT" ] && xrandr --output "$OUTPUT" --auto 2>/dev/null || true
-SCRIPT
-chmod +x /usr/local/bin/osi-display-resize
-
-# systemd service for the resize trigger
-cat > /etc/systemd/system/osi-display-resize.service << 'EOF'
-[Unit]
-Description=OSI Display Auto-Resize (SPICE)
-After=graphical.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/osi-display-resize
-EOF
-
-# udev rule: trigger resize when virtio-gpu display changes
-mkdir -p /etc/udev/rules.d
-cat > /etc/udev/rules.d/99-osi-spice-resize.rules << 'EOF'
-ACTION=="change", KERNEL=="card0", SUBSYSTEM=="drm", RUN+="/usr/bin/systemctl start osi-display-resize.service"
-EOF
-
 # ── Fix networkd-wait-online hang (common 2min boot delay) ───────────────────
 mkdir -p /etc/systemd/system/systemd-networkd-wait-online.service.d
 cat > /etc/systemd/system/systemd-networkd-wait-online.service.d/override.conf << 'EOF'
@@ -157,32 +93,5 @@ if [ -f /etc/default/grub ]; then
     sed -i 's/GRUB_TIMEOUT=.*/GRUB_TIMEOUT=2/' /etc/default/grub
     sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet net.ifnames=0"/' /etc/default/grub
 fi
-
-# ── SPICE vdagent auto-resize on login ────────────────────────────────────────
-mkdir -p /etc/xdg/autostart
-cat > /etc/xdg/autostart/spice-vdagent.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=SPICE Agent
-Comment=SPICE guest agent for clipboard and display resize
-Exec=/usr/bin/spice-vdagent
-Hidden=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true
-X-XFCE-Autostart-Override=true
-EOF
-
-# Trigger an immediate resize when X session starts
-cat > /etc/xdg/autostart/osi-resize-display.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=OSI Display Resize
-Comment=Trigger display resize on login
-Exec=sh -c "sleep 1 && xrandr --output Virtual-0 --auto 2>/dev/null; xrandr --output Virtual0 --auto 2>/dev/null; xrandr --output Virtual-1 --auto 2>/dev/null; true"
-Hidden=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true
-X-XFCE-Autostart-Override=true
-EOF
 
 echo "[OSI] System configuration complete."
