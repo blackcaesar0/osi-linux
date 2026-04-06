@@ -8,7 +8,8 @@ set -euo pipefail
 ISO="${1:-}"
 DISK="${DISK_IMAGE:-$HOME/VM/osi-linux.qcow2}"
 DISK_SIZE="${DISK_SIZE:-80G}"
-VARS="$HOME/VM/osi-linux-efi-vars.fd"
+# Match launch-vm.sh: vars file follows the disk path
+VARS="${DISK%.qcow2}-efi-vars.fd"
 
 if [ -z "$ISO" ]; then
     echo "Usage: bash scripts/create-vm.sh <path-to-iso>"

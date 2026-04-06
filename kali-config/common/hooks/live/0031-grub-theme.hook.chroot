@@ -1,0 +1,65 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — GRUB theme (post-install / native boot)
+# Solid-color + teal accent; no large PNG (avoids GRUB image limits on some firmware).
+# ISO boot menus may still use live-build defaults; this applies to grub-mkconfig
+# on an installed system or chroot where GRUB_THEME is honored.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+echo "[OSI] Installing GRUB theme..."
+
+mkdir -p /boot/grub/themes/OSI
+
+cat > /boot/grub/themes/OSI/theme.txt << 'EOF'
+# OSI Linux — GRUB 2 theme (teal on dark)
+desktop-color: "#0b0e14"
+title-text: ""
+terminal-font: "Unknown Regular 16"
+
++ boot_menu {
+  left = 8%
+  top = 22%
+  width = 84%
+  height = 55%
+  item_font = "Unknown Regular 16"
+  item_color = "#c8d0dc"
+  item_height = 36
+  item_padding = 12
+  item_spacing = 6
+  selected_item_color = "#0b0e14"
+  selected_item_background_color = "#00c9a7"
+  icon_width = 32
+  icon_height = 32
+}
+
++ label {
+  text = "OSI Linux"
+  left = 0
+  top = 8%
+  width = 100%
+  align = "center"
+  color = "#00c9a7"
+  font = "Unknown Regular 22"
+}
+
++ progress_bar {
+  id = "__timeout__"
+  left = 12%
+  top = 86%
+  height = 18
+  width = 76%
+  fg_color = "#00c9a7"
+  bg_color = "#1a222c"
+  border_color = "#007a6b"
+}
+EOF
+
+mkdir -p /etc/default/grub.d
+cat > /etc/default/grub.d/99-osi-theme.cfg << 'EOF'
+# OSI Linux branding (sourced by grub-mkconfig)
+GRUB_DISTRIBUTOR="OSI Linux"
+GRUB_THEME=/boot/grub/themes/OSI/theme.txt
+EOF
+
+echo "[OSI] GRUB theme installed (run update-grub after install to apply)."

@@ -25,13 +25,13 @@ cat > /etc/issue << 'EOF'
 
   ╔═══════════════════════════════╗
   ║         OSI  Linux            ║
-  ║    Offensive Security Intel   ║
+  ║ Offensive Security Initiative ║
   ╚═══════════════════════════════╝
 
 EOF
 
 cat > /etc/issue.net << 'EOF'
-OSI Linux — Offensive Security Intel
+OSI Linux — Offensive Security Initiative
 EOF
 
 # ── MOTD ──────────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ cat > /etc/motd << 'EOF'
 
   ┌─────────────────────────────────────┐
   │           OSI Linux                 │
-  │     Offensive Security Intel        │
+  │ Offensive Security Initiative       │
   │                                     │
   │  Default creds:  osi / osi          │
   │  Change them:    passwd             │
@@ -70,12 +70,12 @@ generate_wallpaper() {
            -rotate 45 -gravity center -crop 1920x1080+0+0 +repage \
         \) -compose Overlay -composite \
         \( -size 1920x1080 xc:none \
-           -fill "#00ffcc08" -draw "circle 960,540 960,900" \
+           -fill "#00c9a708" -draw "circle 960,540 960,900" \
         \) -compose Over -composite \
-        -font "Hack-Bold" -pointsize 72 -fill "#00ffcc" -gravity center \
-        -annotate +0-60 "OSI" \
-        -font "Hack-Regular" -pointsize 24 -fill "#565f89" \
-        -annotate +0+30 "Offensive Security Intel" \
+        -font "Hack-Bold" -pointsize 58 -fill "#00c9a7" -gravity center \
+        -annotate +0-42 "(OSI)" \
+        -font "Hack-Bold" -pointsize 22 -fill "#8b9bb0" -gravity center \
+        -annotate +0+28 "Offensive Security Initiative" \
         -quality 95 "$out"
 }
 
@@ -89,6 +89,21 @@ fi
 if [ -f /usr/share/backgrounds/osi/osi.png ]; then
     cp /usr/share/backgrounds/osi/osi.png /etc/skel/wallpaper/osi.png
     ln -sf /usr/share/backgrounds/osi/osi.png /usr/share/backgrounds/default.png 2>/dev/null || true
+fi
+
+# ── Panel / menu icon: crisp square glyph (wallpaper thumbnail looks muddy at 16–24px) ─
+mkdir -p /usr/share/pixmaps
+if command -v convert &>/dev/null; then
+    convert -size 64x64 xc:"#0b0e14" \
+        -strokewidth 2 -stroke "#00c9a7" -fill none \
+        -draw "roundrectangle 6,6 57,57 10,10" \
+        -strokewidth 0 -font "Hack-Bold" -pointsize 17 -fill "#00c9a7" \
+        -gravity center -annotate +0+1 "OSI" \
+        /usr/share/pixmaps/osi-menu.png 2>/dev/null \
+        || true
+fi
+if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/osi.png ]; then
+    cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
 fi
 
 # ── XFCE clipman autostart (persistent clipboard across apps) ────────────────

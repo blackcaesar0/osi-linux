@@ -33,7 +33,7 @@ mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
 cat > /etc/skel/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
 gtk-icon-theme-name=Papirus-Dark
-gtk-theme-name=Kali-Dark
+gtk-theme-name=Arc-Dark
 gtk-font-name=Hack 10
 gtk-cursor-theme-name=Adwaita
 gtk-cursor-theme-size=24
@@ -52,7 +52,7 @@ cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
 # GTK2 settings (for older apps like wireshark)
 cat > /etc/skel/.gtkrc-2.0 << 'EOF'
 gtk-icon-theme-name="Papirus-Dark"
-gtk-theme-name="Kali-Dark"
+gtk-theme-name="Arc-Dark"
 gtk-font-name="Hack 10"
 gtk-cursor-theme-name="Adwaita"
 gtk-cursor-theme-size=24
@@ -102,6 +102,48 @@ cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
 </fontconfig>
 EOF
 
+# ── OSI accent overlay (works with Arc-Dark; keeps distro identity off Kali chrome) ─
+mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
+cat > /etc/skel/.config/gtk-3.0/gtk.css << 'EOF'
+/* OSI Linux — GTK 3 accent on Arc-Dark */
+#xfce4-panel.background,
+#xfce4-panel {
+  background-image: none;
+  background-color: #0b0e14;
+  color: #c8d0dc;
+  border: none;
+}
+#xfce4-panel button:hover {
+  background-color: rgba(0, 201, 167, 0.12);
+}
+#xfce4-panel .tasklist button:checked {
+  background-color: rgba(0, 201, 167, 0.22);
+}
+/* Whisker Menu — dark shell + teal selection */
+.whiskermenu-window,
+#whiskermenu-window {
+  background-color: #0e141a;
+  color: #c8d0dc;
+}
+.whiskermenu-window treeview.view:selected,
+.whiskermenu-window treeview.view:selected:focus,
+.whiskermenu-window iconview.view:selected {
+  background-color: rgba(0, 201, 167, 0.45);
+  color: #0b0e14;
+}
+.whiskermenu-window entry {
+  background-color: #131920;
+  color: #c8d0dc;
+  border-color: rgba(0, 201, 167, 0.35);
+}
+.whiskermenu-window .sidebar-item:selected,
+.whiskermenu-window list row:selected {
+  background-color: rgba(0, 201, 167, 0.25);
+  color: #f0f4f8;
+}
+EOF
+cp /etc/skel/.config/gtk-3.0/gtk.css /etc/skel/.config/gtk-4.0/gtk.css
+
 # ── Tools directory structure ─────────────────────────────────────────────────
 mkdir -p /etc/skel/tools/{recon,exploitation,post-exploitation,web,network,forensics,custom,wordlists}
 mkdir -p /etc/skel/go/{bin,pkg,src}
@@ -142,30 +184,35 @@ greeter-hide-users=false
 xserver-command=X -keeptty
 EOF
 
-# Prevent spice-vdagent systemd user service from starting alongside the
-# XDG autostart entry. Two vdagent instances in the same session causes
-# vdagentd to kill the second one with "multiple agents in one session".
-# XDG autostart (spice-vdagent.desktop) is the only path we use.
+# Prevent spice-vdagent systemd user service from starting alongside XDG autostart.
+# Two vdagent processes in one session cause vdagentd to drop one ("multiple agents").
 mkdir -p /etc/skel/.config/systemd/user
-cat > /etc/skel/.config/systemd/user/spice-vdagent.service << 'EOF'
-[Unit]
-Description=Masked — using XDG autostart instead to avoid double-instance kill
+ln -sf /dev/null /etc/skel/.config/systemd/user/spice-vdagent.service
 
-[Service]
-ExecStart=/bin/true
-EOF
-# This masks the systemd user service by replacing it with a no-op
+# ── Menu / greeter avatar: crisp 64px emblem (full wallpaper looks wrong at panel size)
+mkdir -p /usr/share/pixmaps
+if command -v convert &>/dev/null; then
+    convert -size 64x64 xc:"#0b0e14" \
+        -strokewidth 2 -stroke "#00c9a7" -fill none \
+        -draw "roundrectangle 6,6 57,57 10,10" \
+        -strokewidth 0 -font "Hack-Bold" -pointsize 17 -fill "#00c9a7" \
+        -gravity center -annotate +0+1 "OSI" \
+        /usr/share/pixmaps/osi-menu.png 2>/dev/null || true
+fi
+if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/osi.png ]; then
+    cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
+fi
 
-# LightDM greeter theme
+# LightDM greeter theme (Arc-Dark + OSI wallpaper)
 cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
 [greeter]
-theme-name=Kali-Dark
+theme-name=Arc-Dark
 icon-theme-name=Papirus-Dark
 font-name=Hack 10
 background=/usr/share/backgrounds/osi/osi.png
 user-background=false
 position=50%,center 50%,center
-default-user-image=/usr/share/backgrounds/osi/osi.png
+default-user-image=/usr/share/pixmaps/osi-menu.png
 indicators=~host;~spacer;~clock;~spacer;~session;~power
 clock-format=%H:%M  |  %Y-%m-%d
 active-monitor=#cursor
@@ -175,15 +222,9 @@ EOF
 mkdir -p /etc/skel/.config/xfce4
 cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
 #!/bin/sh
-# Start SPICE agent for clipboard and resize
-if command -v spice-vdagent >/dev/null 2>&1; then
-    spice-vdagent &
-fi
-
-# Load Xresources for DPI/font settings
+# SPICE: use /etc/xdg/autostart/spice-vdagent.desktop only (see 0015 hook).
+# Starting spice-vdagent here *and* via autostart creates two agents and breaks clipboard.
 [ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
-
-# Start XFCE
 exec startxfce4
 XINITRC
 chmod +x /etc/skel/.config/xfce4/xinitrc

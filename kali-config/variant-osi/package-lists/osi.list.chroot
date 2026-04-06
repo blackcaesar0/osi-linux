@@ -24,6 +24,7 @@ fonts-hack
 fonts-noto
 fonts-noto-color-emoji
 papirus-icon-theme
+arc-theme
 kali-themes
 # kali-wallpapers removed — no longer packaged; branding hook generates wallpaper
 dbus-x11

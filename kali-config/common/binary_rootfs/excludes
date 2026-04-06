@@ -1,0 +1,4 @@
+# Paths relative to the live rootfs (inner chroot). Used by mksquashfs -ef (see live-build lb_binary_rootfs).
+# 99-osi-build.conf is written on the build host chroot only to silence needrestart during lb binary_syslinux;
+# it must not appear on the installed/live system.
+etc/needrestart/conf.d/99-osi-build.conf
