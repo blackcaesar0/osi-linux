@@ -1,0 +1,33 @@
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableAccounts": false,
+    "DisableFormHistory": true,
+    "DontCheckDefaultBrowser": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "NewTabPage": false,
+    "Homepage": {
+      "URL": "about:blank",
+      "Locked": false,
+      "StartPage": "homepage"
+    },
+    "ExtensionSettings": {
+      "*": {
+        "installation_mode": "allowed"
+      }
+    },
+    "Preferences": {
+      "browser.theme.content-theme": { "Value": 0, "Status": "default" },
+      "browser.theme.toolbar-theme": { "Value": 0, "Status": "default" },
+      "ui.systemUsesDarkTheme": { "Value": 1, "Status": "default" },
+      "toolkit.legacyUserProfileCustomizations.stylesheets": { "Value": true, "Status": "locked" },
+      "browser.in-content.dark-mode": { "Value": true, "Status": "default" },
+      "browser.compactmode.show": { "Value": true, "Status": "default" },
+      "browser.uidensity": { "Value": 1, "Status": "default" },
+      "layout.css.prefers-color-scheme.content-override": { "Value": 0, "Status": "default" }
+    }
+  }
+}

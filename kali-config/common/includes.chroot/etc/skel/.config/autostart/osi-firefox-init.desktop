@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OSI Firefox theme bootstrap
+Comment=Drops OSI-Noir userChrome.css into the active Firefox profile
+Exec=sh -c "$HOME/.config/osi-firefox-init.sh"
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true

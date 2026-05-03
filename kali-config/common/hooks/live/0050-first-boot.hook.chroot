@@ -2,10 +2,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # OSI Linux — First-boot service
 #
-# Runs ONCE on the first boot after install. Does:
+# Runs ONCE on the first real boot after install. Does:
 #   - Regenerate SSH host keys (every VM clone gets unique keys)
-#   - Initialize Metasploit database (msfdb init)
-#   - Remove itself after completion
+#   - Initialize the Metasploit database (msfdb init), with a hard timeout so
+#     a stuck PostgreSQL doesn't loop forever
+#   - Always disables and removes itself, even on partial failure
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -13,43 +14,66 @@ echo "[OSI] Installing first-boot service..."
 
 cat > /usr/local/bin/osi-first-boot << 'SCRIPT'
 #!/bin/bash
-set -euo pipefail
+# Always tear ourselves down at exit — never leave the unit enabled, even on
+# error. Otherwise a stuck msfdb call could re-trigger every boot forever.
+set -uo pipefail
 exec >> /var/log/osi-first-boot.log 2>&1
-echo "[$(date)] First boot starting..."
 
-# Regenerate SSH host keys (unique per VM/install)
-echo "[$(date)] Regenerating SSH host keys..."
+cleanup() {
+    rc=$?
+    echo "[$(date -Is)] cleanup (exit=$rc) — disabling self"
+    systemctl disable osi-first-boot.service 2>/dev/null || true
+    rm -f /etc/systemd/system/osi-first-boot.service /usr/local/bin/osi-first-boot
+    systemctl daemon-reload 2>/dev/null || true
+    exit "$rc"
+}
+trap cleanup EXIT INT TERM
+
+echo "[$(date -Is)] first boot starting"
+
+# ── Unique SSH host keys per install/clone ──────────────────────────────────
+echo "[$(date -Is)] regenerating SSH host keys"
 rm -f /etc/ssh/ssh_host_*
-ssh-keygen -A
-echo "[$(date)] SSH host keys regenerated."
+ssh-keygen -A || echo "  ssh-keygen -A failed (non-fatal)"
+echo "[$(date -Is)] SSH host keys regenerated"
 
-# Initialize Metasploit database
-echo "[$(date)] Initializing Metasploit database..."
-if command -v msfdb &>/dev/null; then
-    msfdb reinit 2>&1 || msfdb init 2>&1 || true
-    echo "[$(date)] Metasploit database ready."
+# ── Metasploit DB (with timeout — must not hang forever) ────────────────────
+if command -v msfdb >/dev/null 2>&1; then
+    echo "[$(date -Is)] initializing metasploit database"
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 120 msfdb reinit </dev/null \
+            || timeout 120 msfdb init </dev/null \
+            || echo "  msfdb init failed/timed out (non-fatal)"
+    else
+        msfdb reinit </dev/null || msfdb init </dev/null || true
+    fi
+    echo "[$(date -Is)] metasploit database ready"
 fi
 
-# Set hostname from DHCP lease if possible (makes clones distinguishable)
-# Default stays 'osi' — this is just informational
-echo "[$(date)] Hostname: $(hostname)"
+# ── Force interactive password change for default users ─────────────────────
+# Both osi and root start with expired passwords; PAM will prompt for a new
+# one on the first interactive login. This stops the famous "default creds
+# left enabled" foot-gun.
+for u in osi root; do
+    if id "$u" >/dev/null 2>&1; then
+        chage -d 0 "$u" 2>/dev/null || true
+    fi
+done
 
-echo "[$(date)] First boot complete. Disabling service."
-systemctl disable osi-first-boot.service 2>/dev/null || true
-rm -f /etc/systemd/system/osi-first-boot.service
-systemctl daemon-reload
+echo "[$(date -Is)] first boot complete"
 SCRIPT
 chmod +x /usr/local/bin/osi-first-boot
 
 cat > /etc/systemd/system/osi-first-boot.service << 'EOF'
 [Unit]
-Description=OSI Linux First Boot Setup
+Description=OSI Linux first-boot setup
 After=network.target postgresql.service
 ConditionPathExists=/usr/local/bin/osi-first-boot
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/osi-first-boot
+TimeoutStartSec=300
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal

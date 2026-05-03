@@ -79,19 +79,67 @@ if [ ! -f "$VARS" ]; then
 fi
 
 # ── Stale PID check ───────────────────────────────────────────────────────────
+# kill -0 alone is unreliable: the OS could have recycled the PID for an
+# unrelated process. Verify the comm name actually starts with `qemu-` before
+# treating the PID file as a live VM.
 if [ -f "$PIDFILE" ]; then
-    OLD_PID=$(cat "$PIDFILE")
-    if kill -0 "$OLD_PID" 2>/dev/null; then
-        echo "VM already running (PID $OLD_PID). Kill it first: kill $OLD_PID"
-        exit 1
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null || true)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+        OLD_COMM=""
+        [ -r "/proc/$OLD_PID/comm" ] && OLD_COMM=$(tr -d '\n' < "/proc/$OLD_PID/comm")
+        case "$OLD_COMM" in
+            qemu-*|qemu_*)
+                echo "VM already running (PID $OLD_PID, comm=$OLD_COMM). Kill it first:"
+                echo "  kill $OLD_PID"
+                exit 1
+                ;;
+            *)
+                echo "Stale PID file (PID $OLD_PID is '$OLD_COMM', not QEMU) — removing."
+                rm -f "$PIDFILE"
+                ;;
+        esac
+    else
+        rm -f "$PIDFILE"
     fi
-    rm -f "$PIDFILE"
+fi
+
+# ── Architecture / accelerator detection ─────────────────────────────────────
+HOST_ARCH=$(uname -m)
+case "$HOST_ARCH" in
+    x86_64|amd64)
+        QEMU_BIN="${QEMU_BIN:-qemu-system-x86_64}"
+        QEMU_MACHINE="${QEMU_MACHINE:-type=q35,accel=kvm}"
+        QEMU_CPU="${QEMU_CPU:-host}"
+        ;;
+    aarch64|arm64)
+        QEMU_BIN="${QEMU_BIN:-qemu-system-aarch64}"
+        QEMU_MACHINE="${QEMU_MACHINE:-type=virt,accel=kvm,gic-version=3}"
+        QEMU_CPU="${QEMU_CPU:-host}"
+        ;;
+    *)
+        echo "WARNING: untested host arch '$HOST_ARCH' — falling back to qemu-system-$HOST_ARCH with TCG."
+        QEMU_BIN="${QEMU_BIN:-qemu-system-$HOST_ARCH}"
+        QEMU_MACHINE="${QEMU_MACHINE:-type=virt,accel=tcg}"
+        QEMU_CPU="${QEMU_CPU:-max}"
+        ;;
+esac
+if ! command -v "$QEMU_BIN" >/dev/null 2>&1; then
+    echo "ERROR: $QEMU_BIN not found. Install QEMU for $HOST_ARCH first."
+    exit 1
+fi
+# Drop accel=kvm if /dev/kvm isn't accessible — keeps the script working on
+# CI runners and over SSH where the user isn't in the kvm group.
+if [[ "$QEMU_MACHINE" == *"accel=kvm"* ]] && [ ! -r /dev/kvm ]; then
+    echo "WARNING: /dev/kvm not accessible — falling back to TCG (slow). Add yourself to the kvm group:"
+    echo "  sudo usermod -aG kvm \$USER && newgrp kvm"
+    QEMU_MACHINE="${QEMU_MACHINE//accel=kvm/accel=tcg}"
+    QEMU_CPU="max"
 fi
 
 # ── Build argument arrays ────────────────────────────────────────────────────
 QEMU_ARGS=(
-    -machine type=q35,accel=kvm
-    -cpu host
+    -machine "$QEMU_MACHINE"
+    -cpu "$QEMU_CPU"
     -smp "cores=${VM_CORES},threads=${VM_THREADS}"
     -m "$VM_RAM"
 )
@@ -214,7 +262,7 @@ echo "  CPU:     ${VM_CORES}c/${VM_THREADS}t"
 echo "  Display: $DISPLAY_MODE"
 echo ""
 
-qemu-system-x86_64 "${QEMU_ARGS[@]}"
+"$QEMU_BIN" "${QEMU_ARGS[@]}"
 
 if [ "$NO_GL" = "1" ]; then
     echo "VM started (PID $(cat "$PIDFILE"))."

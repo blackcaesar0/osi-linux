@@ -13,9 +13,9 @@
       <property name="size" type="uint" value="30"/>
       <property name="background-style" type="uint" value="1"/>
       <property name="background-color" type="array">
-        <value type="uint" value="2827"/>
-        <value type="uint" value="3601"/>
-        <value type="uint" value="5140"/>
+        <value type="uint" value="0"/>
+        <value type="uint" value="0"/>
+        <value type="uint" value="0"/>
         <value type="uint" value="65535"/>
       </property>
       <property name="plugin-ids" type="array">
@@ -36,7 +36,7 @@
     <property name="plugin-1" type="string" value="whiskermenu">
       <property name="show-button-title" type="bool" value="true"/>
       <property name="show-button-icon" type="bool" value="true"/>
-      <property name="button-title" type="string" value="(OSI)"/>
+      <property name="button-title" type="string" value="OSI"/>
       <property name="button-icon" type="string" value="/usr/share/pixmaps/osi-menu.png"/>
       <property name="launcher-show-name" type="bool" value="true"/>
       <property name="launcher-show-description" type="bool" value="true"/>

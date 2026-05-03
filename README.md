@@ -1,25 +1,49 @@
 # OSI Linux
 
-OSI stands for **(OSI) Offensive Security Initiative**. This is a custom Kali-based distribution built for penetration testing and offensive security operations. Runs as a QEMU/KVM virtual machine with full SPICE integration, or boots from USB.
+OSI stands for **(OSI) Offensive Security Initiative**. A custom Kali-based distribution built for penetration testing and offensive security operations, tuned for QEMU/KVM with full SPICE integration. Boots from USB or runs as a VM.
 
-XFCE desktop with OSI team branding, curated tool selection, copy/paste and auto-resize working out of the box.
+XFCE desktop with the **OSI-Noir** cyber-noir theme: strict black-and-white, glitch and grain motifs, no chroma. Copy/paste and auto-resize work out of the box.
 
 ---
 
 ## Features
 
-- **Kali rolling base** — access to Kali's entire tool repository via `apt`
-- **XFCE desktop** — clean, familiar desktop with OSI dark theme
-- **Copy/paste works immediately** — SPICE vdagent + clipman, no configuration needed
-- **Auto-resize display** — resize the SPICE window and the guest follows instantly
-- **OSI team theme** — dark base with custom branding, Papirus-Dark icons, Hack font
-- **QEMU/KVM optimized** — virtio-gpu, virtio-scsi, virtio-net, SPICE audio, balloon, RNG
+- **Kali rolling base** — full Kali tool repository via `apt`
+- **OSI-Noir theme** — strict B&W cyber-noir aesthetic across GRUB, Plymouth, LightDM, GTK 3/4, xfwm4, terminal, and Firefox chrome. No real-world logos, no Guy Fawkes masks, no chroma
+- **QEMU/KVM optimized** — virtio-gpu, virtio-scsi, virtio-net, SPICE audio, balloon, RNG, qemu-guest-agent enabled, virtio modules pre-loaded into initramfs
+- **Copy/paste + auto-resize out of the box** — SPICE vdagent autostart, hardened `osi-resize` udev hook (handles Xorg + Xwayland)
+- **Force-rotate default credentials** — `osi:osi` / `root:toor` are pre-expired; PAM blocks any sudo/login until the password is changed
 - **Curated tools** — metasploit, nmap, burpsuite, bloodhound, impacket, hashcat, ghidra, and more
 - **Development ready** — Python 3, Ruby, Go, Node.js, Java, full build toolchain
 - **Live ISO** — boot from USB or run in QEMU, install to disk when ready
-- **Everything baked in** — no post-install scripts, it just works
+- **Hardened build** — atomic apt-get wrapper with lockfile, post-build ISO validation (size, volume descriptor, El Torito boot record, kernel/initrd presence, SHA256 sidecar)
 
 ---
+
+## Theme — OSI-Noir
+
+Cyber-noir, hacker realism, digital decay, data-world abstraction. Strict black-and-white (limited grayscale only when symbolic or for clarity) — never full color. Backgrounds are mostly black with intentional negative space. Glitches, scanlines, grain, ASCII texture and circuit patterns are all allowed; comic styles, real-world logos, Guy Fawkes masks, and full-spectrum color are not.
+
+The theme is layered everywhere a user sees pixels:
+
+| Layer | Implementation |
+|---|---|
+| Boot loader | `OSI-Noir` GRUB 2 theme — white-on-black, inverted-selection accent, no images |
+| Boot splash | `osi-noir` Plymouth theme — animated ASCII grain + thin progress bar, no logo |
+| Login screen | LightDM GTK greeter on `OSI-Noir` GTK theme + B&W wallpaper |
+| Desktop wallpaper | `osi-noir-network.png` (default) — abstract network graph dissolving into glitch. Alts: `cat` (silhouette reading code), `terminal` (corrupted ASCII waterfall), `grain` (texture overlay) |
+| GTK 3 / 4 | Custom `OSI-Noir` theme overlaying Adwaita-dark; every accent color forced to white-on-black |
+| Window manager | `OSI-Noir` xfwm4 theme — desaturated borders, white active title text, gray inactive |
+| Terminal | xfce4-terminal palette mapped to a 16-step grayscale ramp; pure black background |
+| Firefox chrome | `userChrome.css` dropped into the active profile on first login by `osi-firefox-init.sh` |
+| Console / TTY | Mono ASCII banners in `/etc/issue` and `/etc/motd` — no color escapes |
+
+Switch wallpapers from XFCE Settings → Desktop, or directly:
+
+```sh
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorVirtual-0/workspace0/last-image \
+  -s /usr/share/backgrounds/osi/osi-noir-cat.png
+```
 
 ## Quick Start
 
@@ -67,7 +91,9 @@ sudo dd if=build/osi-linux-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 | `osi` | `osi` | Desktop user with passwordless sudo |
 | `root` | `toor` | Root account |
 
-**Change these after first login:** `passwd`
+Both passwords are **immediately expired** — the first `sudo`, `su`, console login, or SSH login will refuse to proceed until the password is changed (`passwd` is invoked automatically by PAM). Auto-login still works for the GUI session, but nothing privileged runs until you rotate the password.
+
+**Manually rotate at any time:** `passwd`
 
 ---
 

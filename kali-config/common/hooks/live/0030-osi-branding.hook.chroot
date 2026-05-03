@@ -1,13 +1,18 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# OSI Linux — Branding and cleanup hook
-# Runs inside the chroot during ISO build.
+# OSI Linux — Branding hook (cyber-noir, strict B&W)
+#
+# Theme rules enforced here:
+#   - black / dark backgrounds, intentional negative space
+#   - grayscale only (#000, #1a1a1a, #888, #c8c8c8, #fff); no chroma
+#   - glitch / scanline / grain / ASCII texture motifs allowed
+#   - no real-world logos, no Guy Fawkes masks, no comic styles
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-echo "[OSI] Applying branding..."
+log() { printf '[OSI/branding] %s\n' "$*"; }
 
-# ── OS release branding ───────────────────────────────────────────────────────
+# ── /etc/os-release ───────────────────────────────────────────────────────────
 cat > /etc/os-release << 'EOF'
 PRETTY_NAME="OSI Linux"
 NAME="OSI Linux"
@@ -18,95 +23,86 @@ VERSION_ID="rolling"
 HOME_URL="https://github.com/blackcaesar0/osi-linux"
 SUPPORT_URL="https://github.com/blackcaesar0/osi-linux/issues"
 BUG_REPORT_URL="https://github.com/blackcaesar0/osi-linux/issues"
+ANSI_COLOR="0;37"
 EOF
 
-# ── /etc/issue (login banner) ─────────────────────────────────────────────────
+# ── /etc/issue (TTY login banner) — mono ASCII, glitch fragments ─────────────
 cat > /etc/issue << 'EOF'
 
-  ╔═══════════════════════════════╗
-  ║         OSI  Linux            ║
-  ║ Offensive Security Initiative ║
-  ╚═══════════════════════════════╝
+   ▓▒░  O S I   L I N U X  ░▒▓
+   ─── offensive security initiative ───
+   tty \l on \n (\s \r \m)
+
+   :: default credentials are EXPIRED on first login ::
+   :: change them immediately when prompted          ::
 
 EOF
 
 cat > /etc/issue.net << 'EOF'
 OSI Linux — Offensive Security Initiative
+Authorized access only. All sessions are logged.
 EOF
 
-# ── MOTD ──────────────────────────────────────────────────────────────────────
+# ── /etc/motd — mono, no color escapes ───────────────────────────────────────
 cat > /etc/motd << 'EOF'
 
-  ┌─────────────────────────────────────┐
-  │           OSI Linux                 │
-  │ Offensive Security Initiative       │
-  │                                     │
-  │  Default creds:  osi / osi          │
-  │  Change them:    passwd             │
-  │                                     │
-  │  Desktop:        XFCE               │
-  │  Terminal:       Ctrl+Alt+T         │
-  │  File manager:   Thunar             │
-  │  Clipboard:      auto (SPICE)       │
-  │  Resize:         drag SPICE window  │
-  │                                     │
-  │  VM helpers:                        │
-  │    fix-display   fix-clipboard      │
-  └─────────────────────────────────────┘
+   ╓──────────────────────────────────────────────────────╖
+   ║     ░▒▓  O S I   L I N U X  ▓▒░                     ║
+   ║                                                      ║
+   ║  shell   :: bash / zsh                               ║
+   ║  desktop :: XFCE  (theme: OSI-Noir)                  ║
+   ║  term    :: Ctrl+Alt+T                               ║
+   ║  spice   :: clipboard + auto-resize active           ║
+   ║                                                      ║
+   ║  helpers ::  fix-display   fix-clipboard  osi-update ║
+   ║  docs    ::  /usr/share/doc/osi/                     ║
+   ╙──────────────────────────────────────────────────────╜
 
 EOF
 
-# ── Generate wallpaper if osi.png doesn't exist ──────────────────────────────
-generate_wallpaper() {
-    local out="$1"
-    if ! command -v convert &>/dev/null; then
-        echo "    [WARN] ImageMagick not available — skipping wallpaper generation"
-        return 1
-    fi
-    echo "    Generating wallpaper (1920x1080)..."
-    convert -size 1920x1080 \
-        xc:"#0a0a0f" \
-        \( -size 1920x1080 gradient:"#0a0a1a"-"#0a0a0f" \
-           -rotate 45 -gravity center -crop 1920x1080+0+0 +repage \
-        \) -compose Overlay -composite \
-        \( -size 1920x1080 xc:none \
-           -fill "#00c9a708" -draw "circle 960,540 960,900" \
-        \) -compose Over -composite \
-        -font "Hack-Bold" -pointsize 58 -fill "#00c9a7" -gravity center \
-        -annotate +0-42 "(OSI)" \
-        -font "Hack-Bold" -pointsize 22 -fill "#8b9bb0" -gravity center \
-        -annotate +0+28 "Offensive Security Initiative" \
-        -quality 95 "$out"
-}
+# ── Wallpapers ───────────────────────────────────────────────────────────────
+# The .png files are shipped via includes.chroot. Hook only fills in fallbacks
+# if any are missing (e.g. someone trimmed the includes tree).
+WALLPAPER_DIR="/usr/share/backgrounds/osi"
+mkdir -p "$WALLPAPER_DIR" /etc/skel/wallpaper
 
-mkdir -p /usr/share/backgrounds/osi
-mkdir -p /etc/skel/wallpaper
+DEFAULT_WP="$WALLPAPER_DIR/osi.png"
 
-if [ ! -f /usr/share/backgrounds/osi/osi.png ] || [ ! -s /usr/share/backgrounds/osi/osi.png ]; then
-    generate_wallpaper /usr/share/backgrounds/osi/osi.png || true
+# fall back to the network variant if osi.png is missing
+if [ ! -s "$DEFAULT_WP" ] && [ -s "$WALLPAPER_DIR/osi-noir-network.png" ]; then
+    cp "$WALLPAPER_DIR/osi-noir-network.png" "$DEFAULT_WP"
 fi
 
-if [ -f /usr/share/backgrounds/osi/osi.png ]; then
-    cp /usr/share/backgrounds/osi/osi.png /etc/skel/wallpaper/osi.png
-    ln -sf /usr/share/backgrounds/osi/osi.png /usr/share/backgrounds/default.png 2>/dev/null || true
+# generated-on-the-fly emergency fallback (pure black with grain) if everything
+# else is missing — keeps the build from failing.
+if [ ! -s "$DEFAULT_WP" ] && command -v convert >/dev/null 2>&1; then
+    log "no shipped wallpaper found; generating emergency B&W fallback"
+    convert -size 1920x1080 xc:black \
+        +noise Gaussian -attenuate 0.4 -colorspace Gray \
+        -evaluate multiply 0.5 \
+        "$DEFAULT_WP" || true
 fi
 
-# ── Panel / menu icon: crisp square glyph (wallpaper thumbnail looks muddy at 16–24px) ─
+if [ -s "$DEFAULT_WP" ]; then
+    cp "$DEFAULT_WP" /etc/skel/wallpaper/osi.png
+    ln -sf "$DEFAULT_WP" /usr/share/backgrounds/default.png 2>/dev/null || true
+fi
+
+# ── Panel / menu icon (mono, thin stroke, no text) ───────────────────────────
 mkdir -p /usr/share/pixmaps
-if command -v convert &>/dev/null; then
-    convert -size 64x64 xc:"#0b0e14" \
-        -strokewidth 2 -stroke "#00c9a7" -fill none \
-        -draw "roundrectangle 6,6 57,57 10,10" \
-        -strokewidth 0 -font "Hack-Bold" -pointsize 17 -fill "#00c9a7" \
-        -gravity center -annotate +0+1 "OSI" \
-        /usr/share/pixmaps/osi-menu.png 2>/dev/null \
-        || true
+if command -v convert >/dev/null 2>&1; then
+    # Minimal sigil: thin square outline + diagonal slash, white on black.
+    convert -size 64x64 xc:black \
+        -strokewidth 2 -stroke "#e5e5e5" -fill none \
+        -draw "rectangle 8,8 56,56" \
+        -draw "line 8,8 56,56" \
+        -draw "line 56,8 8,56" \
+        /usr/share/pixmaps/osi-menu.png 2>/dev/null || true
 fi
-if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/osi.png ]; then
-    cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
-fi
+[ -f /usr/share/pixmaps/osi-menu.png ] || \
+    cp -f "$DEFAULT_WP" /usr/share/pixmaps/osi-menu.png 2>/dev/null || true
 
-# ── XFCE clipman autostart (persistent clipboard across apps) ────────────────
+# ── Clipman autostart (persistent clipboard across apps) ─────────────────────
 mkdir -p /etc/xdg/autostart
 cat > /etc/xdg/autostart/xfce4-clipman-plugin-autostart.desktop << 'EOF'
 [Desktop Entry]
@@ -119,10 +115,10 @@ Type=Application
 X-XFCE-Autostart-Override=true
 EOF
 
-# ── Cleanup ───────────────────────────────────────────────────────────────────
-echo "[OSI] Cleaning up..."
+# ── Cleanup ──────────────────────────────────────────────────────────────────
+log "cleaning apt cache"
 apt-get clean
 rm -rf /var/cache/apt/archives/*.deb
-rm -rf /tmp/*
+rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
 
-echo "[OSI] Branding complete."
+log "done"
