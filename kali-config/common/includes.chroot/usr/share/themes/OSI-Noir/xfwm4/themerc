@@ -34,5 +34,5 @@ inactive_hilight_2=#000000
 inactive_mid_2=#000000
 inactive_shadow_2=#000000
 
-active_border_color=#3a3a3a
-inactive_border_color=#1a1a1a
+active_border_color=#5a5a5a
+inactive_border_color=#2a2a2a

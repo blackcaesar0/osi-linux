@@ -31,13 +31,27 @@ if [ -n "$SRC" ]; then
     # copy everything except themerc (we ship our own)
     find "$SRC" -maxdepth 1 -type f ! -name themerc -exec cp -n {} "$XFWM_DST"/ \;
 
-    # convert any remaining color in the pixmaps to grayscale
+    # Convert any remaining color in the pixmaps to grayscale.
+    # Modern ImageMagick ships a policy.xml that blocks XPM (CVE-2016-3714 era
+    # carry-over). We unblock it inside the chroot only for this build step.
+    POLICY=/etc/ImageMagick-6/policy.xml
+    POLICY_BAK=""
+    if [ -f "$POLICY" ] && grep -q 'pattern="XPM"' "$POLICY" 2>/dev/null; then
+        POLICY_BAK="$(mktemp)"
+        cp "$POLICY" "$POLICY_BAK"
+        sed -i 's#<policy domain="coder" rights="none" pattern="XPM"#<policy domain="coder" rights="read|write" pattern="XPM"#g' "$POLICY" || true
+    fi
+
     if command -v convert >/dev/null 2>&1; then
         log "desaturating xfwm4 pixmaps to grayscale"
         for f in "$XFWM_DST"/*.xpm "$XFWM_DST"/*.png; do
             [ -f "$f" ] || continue
             convert "$f" -colorspace Gray "$f" 2>/dev/null || true
         done
+    fi
+
+    if [ -n "$POLICY_BAK" ]; then
+        mv "$POLICY_BAK" "$POLICY"
     fi
 else
     log "WARN: no source xfwm4 theme found; window borders will fall back to defaults"
