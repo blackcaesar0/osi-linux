@@ -61,12 +61,21 @@ network-manager-gnome
 spice-vdagent
 qemu-guest-agent
 xserver-xorg-video-all
+xserver-xorg-video-qxl
 mesa-utils
 libgl1-mesa-dri
 libglx-mesa0
 x11-xserver-utils
 xsel
 arandr
+
+# ── Boot splash (cyber-noir Plymouth theme: osi-noir) ────────────────────────
+plymouth
+plymouth-themes
+plymouth-x11
+
+# ── ImageMagick — required by branding/grub/theme hooks ──────────────────────
+imagemagick
 
 # ── Audio in QEMU (intel-hda via SPICE) ──────────────────────────────────────
 pulseaudio
@@ -226,5 +235,3 @@ zathura
 docker.io
 docker-compose
 
-# ── ImageMagick ───────────────────────────────────────────────────────────────
-imagemagick

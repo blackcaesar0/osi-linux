@@ -1,0 +1,93 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — finalize the OSI-Noir theme.
+#
+# The static parts of the theme (GTK 3/4 CSS, themerc, index.theme) are shipped
+# as includes.chroot. This hook fills in the runtime-derived pieces:
+#
+#  - Copies xfwm4 pixmaps from the system Default theme into OSI-Noir so window
+#    borders and title bars actually render. Then recolors them to grayscale
+#    in case the source ships chromatic accents.
+#  - Generates a tiny grayscale Adwaita-mono icon override (papirus-style mono
+#    folder icons) if papirus-folders is available, otherwise no-ops.
+#  - Caches GTK icon themes so first-login is snappy.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+log() { printf '[OSI/theme] %s\n' "$*"; }
+
+THEME=/usr/share/themes/OSI-Noir
+XFWM_DST="$THEME/xfwm4"
+
+# ── pull base xfwm4 pixmaps from the system Default theme ────────────────────
+SRC=""
+for cand in /usr/share/themes/Default/xfwm4 \
+            /usr/share/themes/Daloa/xfwm4 \
+            /usr/share/themes/Adwaita/xfwm4; do
+    if [ -d "$cand" ]; then SRC="$cand"; break; fi
+done
+
+if [ -n "$SRC" ]; then
+    log "seeding xfwm4 pixmaps from $SRC"
+    # copy everything except themerc (we ship our own)
+    find "$SRC" -maxdepth 1 -type f ! -name themerc -exec cp -n {} "$XFWM_DST"/ \;
+
+    # Convert any remaining color in the pixmaps to grayscale.
+    # Modern ImageMagick ships a policy.xml that blocks XPM (CVE-2016-3714 era
+    # carry-over). We unblock it inside the chroot only for this build step.
+    POLICY=/etc/ImageMagick-6/policy.xml
+    POLICY_BAK=""
+    if [ -f "$POLICY" ] && grep -q 'pattern="XPM"' "$POLICY" 2>/dev/null; then
+        POLICY_BAK="$(mktemp)"
+        cp "$POLICY" "$POLICY_BAK"
+        sed -i 's#<policy domain="coder" rights="none" pattern="XPM"#<policy domain="coder" rights="read|write" pattern="XPM"#g' "$POLICY" || true
+    fi
+
+    if command -v convert >/dev/null 2>&1; then
+        log "desaturating xfwm4 pixmaps to grayscale"
+        for f in "$XFWM_DST"/*.xpm "$XFWM_DST"/*.png; do
+            [ -f "$f" ] || continue
+            convert "$f" -colorspace Gray "$f" 2>/dev/null || true
+        done
+    fi
+
+    if [ -n "$POLICY_BAK" ]; then
+        mv "$POLICY_BAK" "$POLICY"
+    fi
+else
+    log "WARN: no source xfwm4 theme found; window borders will fall back to defaults"
+fi
+
+# ── icon theme: keep Adwaita, but if papirus-folders is around, mono-ify it ──
+if command -v papirus-folders >/dev/null 2>&1 && [ -d /usr/share/icons/Papirus-Dark ]; then
+    log "papirus-folders → grey"
+    papirus-folders -C grey --theme Papirus-Dark || true
+fi
+
+# ── force theme defaults system-wide (in addition to per-user xfconf xml) ────
+mkdir -p /etc/gtk-3.0 /etc/gtk-4.0
+cat > /etc/gtk-3.0/settings.ini << 'EOF'
+[Settings]
+gtk-theme-name=OSI-Noir
+gtk-icon-theme-name=Papirus-Dark
+gtk-cursor-theme-name=Adwaita
+gtk-cursor-theme-size=24
+gtk-font-name=Hack 10
+gtk-application-prefer-dark-theme=true
+gtk-decoration-layout=menu:minimize,maximize,close
+gtk-enable-event-sounds=false
+gtk-enable-input-feedback-sounds=false
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+EOF
+cp /etc/gtk-3.0/settings.ini /etc/gtk-4.0/settings.ini
+
+# ── update icon caches (silent if cache tool absent) ─────────────────────────
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    for d in /usr/share/icons/Papirus-Dark /usr/share/icons/Adwaita; do
+        [ -d "$d" ] && gtk-update-icon-cache -f -t "$d" >/dev/null 2>&1 || true
+    done
+fi
+
+log "done"

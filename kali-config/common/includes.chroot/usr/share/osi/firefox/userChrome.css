@@ -1,0 +1,83 @@
+/*
+ * OSI-Noir — Firefox userChrome.css (chrome only; not page content).
+ * Strict B&W. Forces dark monochrome chrome regardless of system theme.
+ *
+ * Installed to ~/.mozilla/firefox/<profile>/chrome/userChrome.css by the
+ * autoconfig setup; toolkit.legacyUserProfileCustomizations.stylesheets must
+ * also be true (set in policies.json).
+ */
+
+:root {
+    --osi-bg:        #000000 !important;
+    --osi-bg-alt:    #0a0a0a !important;
+    --osi-bg-hi:     #1a1a1a !important;
+    --osi-fg:        #c8c8c8 !important;
+    --osi-fg-hi:     #ffffff !important;
+    --osi-muted:     #888888 !important;
+    --osi-border:    #2a2a2a !important;
+    --osi-accent:    #ffffff !important;
+    --osi-accent-fg: #000000 !important;
+
+    /* override Firefox toolkit accent vars */
+    --toolbar-bgcolor: var(--osi-bg) !important;
+    --toolbar-color:   var(--osi-fg) !important;
+    --tab-selected-bgcolor: var(--osi-bg-hi) !important;
+    --tab-selected-textcolor: var(--osi-fg-hi) !important;
+    --toolbarbutton-icon-fill: var(--osi-fg) !important;
+    --lwt-accent-color: var(--osi-bg) !important;
+    --lwt-text-color:   var(--osi-fg) !important;
+}
+
+#main-window,
+#navigator-toolbox,
+#nav-bar,
+#PersonalToolbar,
+#TabsToolbar,
+#titlebar,
+#urlbar-background,
+.tab-background,
+toolbar {
+    background: var(--osi-bg) !important;
+    background-image: none !important;
+    color: var(--osi-fg) !important;
+    border-color: var(--osi-border) !important;
+    box-shadow: none !important;
+}
+
+#urlbar {
+    background: var(--osi-bg-alt) !important;
+    color: var(--osi-fg-hi) !important;
+    border: 1px solid var(--osi-border) !important;
+    box-shadow: none !important;
+}
+#urlbar[focused="true"] {
+    border-color: var(--osi-fg-hi) !important;
+}
+
+.tab-background[selected="true"] {
+    background: var(--osi-bg-hi) !important;
+    border-top: 1px solid var(--osi-fg-hi) !important;
+}
+
+/* selection across the chrome */
+*::selection {
+    background: var(--osi-accent) !important;
+    color: var(--osi-accent-fg) !important;
+}
+
+/* drop chrome accent everywhere */
+.identity-color-blue,
+.identity-color-turquoise,
+.identity-color-purple,
+.identity-color-pink,
+.identity-color-yellow,
+.identity-color-orange {
+    fill: var(--osi-fg) !important;
+}
+
+/* findbar, sidebar, panels */
+findbar, .panel-arrowcontent, panel, menupopup {
+    background: var(--osi-bg) !important;
+    color: var(--osi-fg) !important;
+    border-color: var(--osi-border) !important;
+}

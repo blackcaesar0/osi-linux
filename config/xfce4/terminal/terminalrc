@@ -28,13 +28,21 @@ MiscNewTabAdjacent=FALSE
 MiscSearchDialogOpacity=100
 MiscShowUnsafePasteDialog=FALSE
 ScrollingLines=10000
-# OSI palette: dark base #0b0e14, foreground #c8d0dc, accent #00c9a7
-ColorForeground=#c8d0dc
-ColorBackground=#0b0e14
-ColorCursor=#00c9a7
+# OSI-Noir palette — strict B&W grayscale ramp.
+# Foreground sits in the upper midtone; background pure black.
+ColorForeground=#c8c8c8
+ColorBackground=#000000
+ColorCursor=#ffffff
+ColorCursorForeground=#000000
 ColorCursorUseDefault=FALSE
-ColorPalette=#131920;#e06c75;#56d4b4;#e5c07b;#61afef;#c678dd;#00c9a7;#abb2bf;#3d4a5c;#f44747;#7fffd4;#f5d08a;#528bff;#d4a5ff;#5ef0d0;#f0f4f8
+ColorSelectionBackground=#ffffff
+ColorSelectionUseDefault=FALSE
 ColorBoldUseDefault=FALSE
 ColorBoldIsBright=TRUE
-BackgroundMode=TERMINAL_BACKGROUND_TRANSPARENT
-BackgroundDarkness=0.94
+ColorBold=#ffffff
+# 16-color ANSI palette mapped to a grayscale ramp.
+# Order: black, red, green, yellow, blue, magenta, cyan, white,
+#        bright variants of the same.
+ColorPalette=#000000;#7a7a7a;#9a9a9a;#bababa;#5a5a5a;#8a8a8a;#aaaaaa;#c8c8c8;#3a3a3a;#a0a0a0;#b8b8b8;#d2d2d2;#7e7e7e;#aeaeae;#cacaca;#ffffff
+BackgroundMode=TERMINAL_BACKGROUND_SOLID
+BackgroundDarkness=1.0

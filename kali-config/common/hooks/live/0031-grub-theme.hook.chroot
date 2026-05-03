@@ -1,65 +1,119 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# OSI Linux — GRUB theme (post-install / native boot)
-# Solid-color + teal accent; no large PNG (avoids GRUB image limits on some firmware).
-# ISO boot menus may still use live-build defaults; this applies to grub-mkconfig
-# on an installed system or chroot where GRUB_THEME is honored.
+# OSI Linux — GRUB 2 theme (cyber-noir, strict B&W)
+#
+# White-on-black with a single inverted accent (selected entry = black on
+# white). No chroma, no logos, no images — purely text and 1px rules so the
+# theme works on every firmware (including UEFI with low-res GOP framebuffer).
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-echo "[OSI] Installing GRUB theme..."
+log() { printf '[OSI/grub] %s\n' "$*"; }
 
-mkdir -p /boot/grub/themes/OSI
+THEME_DIR=/boot/grub/themes/OSI-Noir
+mkdir -p "$THEME_DIR"
 
-cat > /boot/grub/themes/OSI/theme.txt << 'EOF'
-# OSI Linux — GRUB 2 theme (teal on dark)
-desktop-color: "#0b0e14"
+cat > "$THEME_DIR/theme.txt" << 'EOF'
+# OSI Linux — GRUB 2 theme: cyber-noir, B&W only
+desktop-color: "#000000"
+desktop-image: ""
 title-text: ""
+message-color: "#c8c8c8"
+message-bg-color: "#000000"
 terminal-font: "Unknown Regular 16"
+terminal-box: "terminal_box_*.png"
 
-+ boot_menu {
-  left = 8%
-  top = 22%
-  width = 84%
-  height = 55%
-  item_font = "Unknown Regular 16"
-  item_color = "#c8d0dc"
-  item_height = 36
-  item_padding = 12
-  item_spacing = 6
-  selected_item_color = "#0b0e14"
-  selected_item_background_color = "#00c9a7"
-  icon_width = 32
-  icon_height = 32
++ label {
+  text = "OSI LINUX"
+  left = 0
+  top = 6%
+  width = 100%
+  align = "center"
+  color = "#ffffff"
+  font = "Unknown Regular 22"
 }
 
 + label {
-  text = "OSI Linux"
+  text = "── offensive security initiative ──"
   left = 0
-  top = 8%
+  top = 11%
   width = 100%
   align = "center"
-  color = "#00c9a7"
-  font = "Unknown Regular 22"
+  color = "#888888"
+  font = "Unknown Regular 14"
+}
+
++ boot_menu {
+  left = 10%
+  top = 22%
+  width = 80%
+  height = 56%
+  item_font = "Unknown Regular 16"
+  item_color = "#c8c8c8"
+  item_height = 32
+  item_padding = 10
+  item_spacing = 4
+  selected_item_color = "#000000"
+  selected_item_pixmap_style = "select_*.png"
+  selected_item_font = "Unknown Bold 16"
+  icon_width = 0
+  icon_height = 0
 }
 
 + progress_bar {
   id = "__timeout__"
-  left = 12%
+  left = 14%
   top = 86%
-  height = 18
-  width = 76%
-  fg_color = "#00c9a7"
-  bg_color = "#1a222c"
-  border_color = "#007a6b"
+  height = 12
+  width = 72%
+  font = "Unknown Regular 12"
+  text = "@TIMEOUT_NOTIFICATION_LONG@"
+  text_color = "#888888"
+  fg_color = "#ffffff"
+  bg_color = "#1a1a1a"
+  border_color = "#3a3a3a"
+}
+
++ label {
+  text = "tab: edit  |  e: edit cmdline  |  c: console"
+  left = 0
+  top = 95%
+  width = 100%
+  align = "center"
+  color = "#5a5a5a"
+  font = "Unknown Regular 11"
 }
 EOF
 
+# selected-entry highlight — solid 1px white background, all 9 slices identical
+# (GRUB needs a 9-slice pixmap; we cheat with a single white pixel scaled out).
+if command -v convert >/dev/null 2>&1; then
+    for f in select_c.png select_n.png select_s.png select_e.png select_w.png \
+             select_ne.png select_nw.png select_se.png select_sw.png; do
+        convert -size 1x1 xc:"#ffffff" "$THEME_DIR/$f" 2>/dev/null || true
+    done
+    # terminal box: 9-slice with thin white border on black
+    for f in terminal_box_c.png; do
+        convert -size 1x1 xc:"#000000" "$THEME_DIR/$f" 2>/dev/null || true
+    done
+    for f in terminal_box_n.png terminal_box_s.png terminal_box_e.png terminal_box_w.png \
+             terminal_box_ne.png terminal_box_nw.png terminal_box_se.png terminal_box_sw.png; do
+        convert -size 1x1 xc:"#c8c8c8" "$THEME_DIR/$f" 2>/dev/null || true
+    done
+fi
+
 mkdir -p /etc/default/grub.d
 cat > /etc/default/grub.d/99-osi-theme.cfg << 'EOF'
-# OSI Linux branding (sourced by grub-mkconfig)
+# OSI Linux — GRUB branding (sourced by grub-mkconfig)
 GRUB_DISTRIBUTOR="OSI Linux"
-GRUB_THEME=/boot/grub/themes/OSI/theme.txt
+GRUB_THEME=/boot/grub/themes/OSI-Noir/theme.txt
+GRUB_BACKGROUND=
+GRUB_GFXMODE=auto
+GRUB_TERMINAL=
+# Faster boot in VMs; press SHIFT to reveal menu
+GRUB_TIMEOUT=2
+GRUB_TIMEOUT_STYLE=menu
+GRUB_DISABLE_RECOVERY=false
 EOF
 
-echo "[OSI] GRUB theme installed (run update-grub after install to apply)."
+log "theme installed at $THEME_DIR"

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=OSI Noir
+Description=OSI Linux cyber-noir boot splash. Black screen, ASCII glitch progress.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/osi-noir
+ScriptFile=/usr/share/plymouth/themes/osi-noir/osi-noir.script

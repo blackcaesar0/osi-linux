@@ -5,27 +5,24 @@
 # Covers:
 #   - SPICE auto-resize without logout (real-time, udev + user service)
 #   - Clipboard sync (host ↔ guest via spice-vdagent)
-#   - virtio-gpu modesetting driver
-#   - Audio fix for intel-hda in QEMU
-#   - Network/DNS fix (mask systemd-resolved)
-#   - Docker overlay2 config
-#   - Journal size limit
+#   - virtio-gpu modesetting + initramfs-preloaded virtio modules
+#   - qemu-guest-agent enabled (clean shutdown / fsfreeze / IP reporting)
+#   - Audio fix for intel-hda
+#   - Network/DNS via NetworkManager (no hardcoded public DNS)
+#   - Docker overlay2 config (DNS inherited from host)
+#   - Plymouth OSI-Noir boot splash activated
 #   - Disable VM-useless services
-#   - Tablet mouse fix
-#   - fix-display / fix-clipboard helper commands
+#   - fix-display / fix-clipboard / clip helpers
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
+log() { printf '[OSI/qemu] %s\n' "$*"; }
 
-echo "[OSI] Applying QEMU/KVM + SPICE fixes..."
-
-# ── spice-vdagentd socket dir ─────────────────────────────────────────────────
-mkdir -p /run/spice-vdagentd
-mkdir -p /etc/tmpfiles.d
+# ── spice-vdagentd socket dir + auto-restart ─────────────────────────────────
+mkdir -p /run/spice-vdagentd /etc/tmpfiles.d
 cat > /etc/tmpfiles.d/spice-vdagentd.conf << 'EOF'
 d /run/spice-vdagentd 0755 root root -
 EOF
 
-# Keep vdagentd alive — it dies on virtio-serial disconnect in some QEMU builds
 mkdir -p /etc/systemd/system/spice-vdagentd.service.d
 cat > /etc/systemd/system/spice-vdagentd.service.d/override.conf << 'EOF'
 [Unit]
@@ -36,77 +33,124 @@ Restart=always
 RestartSec=2
 EOF
 
-# ── SPICE auto-resize — real-time, no logout needed ──────────────────────────
-#
-# Flow: SPICE window resize → DRM mode change → udev rule fires →
-#       systemd user service → xrandr --auto on the running X session.
-#
-# The user spice-vdagent process (started via XDG autostart on login) handles
-# the SPICE channel. The udev rule below is a belt-and-suspenders fallback
-# that works even if spice-vdagent misses the event.
-
+# ── osi-resize: robust SPICE display resize ──────────────────────────────────
 cat > /usr/local/bin/osi-resize << 'SCRIPT'
 #!/bin/bash
-# Called by udev on DRM change and available as a manual command.
-# Finds the active X session (works with lightdm/gdm/startx) and runs xrandr.
+# Triggered by udev (DRM change) or run manually as `fix-display`.
+# Locates the active X server by inspecting /proc/*/comm rather than relying on
+# pgrep, then re-runs `xrandr --auto` (and a per-output fallback) under that
+# session's UID + DISPLAY + XAUTHORITY.
 set -euo pipefail
 
+LOG=/var/log/osi-resize.log
+exec >>"$LOG" 2>&1
+echo "[$(date -Is)] osi-resize triggered"
+
 find_x_session() {
-    # Search all processes for an X session user environment
-    for pid in $(pgrep -x Xorg 2>/dev/null; pgrep -x X 2>/dev/null); do
-        local env_file="/proc/$pid/environ"
-        [ -r "$env_file" ] || continue
-        local disp uid xauth
-        disp=$(tr '\0' '\n' < "$env_file" 2>/dev/null | grep '^DISPLAY=' | head -1 | cut -d= -f2-)
-        uid=$(stat -c %u "$env_file" 2>/dev/null)
-        xauth=$(tr '\0' '\n' < "$env_file" 2>/dev/null | grep '^XAUTHORITY=' | head -1 | cut -d= -f2-)
+    local pid comm env disp xauth uid
+    for pid in /proc/[0-9]*; do
+        [ -r "$pid/comm" ] || continue
+        comm="$(tr -d '\n' < "$pid/comm" 2>/dev/null || true)"
+        case "$comm" in Xorg|X|Xwayland) ;; *) continue ;; esac
+        env="$pid/environ"
+        [ -r "$env" ] || continue
+        disp=$(tr '\0' '\n' < "$env" 2>/dev/null | awk -F= '/^DISPLAY=/{print $2; exit}')
+        xauth=$(tr '\0' '\n' < "$env" 2>/dev/null | awk -F= '/^XAUTHORITY=/{print $2; exit}')
+        # X usually runs as root; instead read who the *session* belongs to from
+        # the LOGNAME of the parent display-manager process tree, falling back
+        # to scanning xfce4-session / gnome-session / startplasma processes.
+        uid=$(_session_uid "${disp:-:0}")
         if [ -n "$disp" ] && [ -n "$uid" ]; then
-            echo "$uid $disp $xauth"
+            printf '%s %s %s\n' "$uid" "$disp" "${xauth:-}"
             return 0
         fi
     done
     return 1
 }
 
-apply_resize() {
-    local uid disp xauth
-    read -r uid disp xauth <<< "$1"
-    local xargs=()
-    [ -n "$xauth" ] && xargs+=( env XAUTHORITY="$xauth" )
-    # Try all common virtio-gpu output names
-    for out in Virtual-0 Virtual0 VGA-0 VGA0 HDMI-0; do
-        if "${xargs[@]:-}" xrandr --display "$disp" --output "$out" --auto 2>/dev/null; then
-            return 0
+_session_uid() {
+    local disp="$1" pid env d uid
+    for pid in /proc/[0-9]*; do
+        [ -r "$pid/comm" ] || continue
+        case "$(tr -d '\n' < "$pid/comm")" in
+            xfce4-session|gnome-session-binary|startplasma-x11|cinnamon-session|mate-session|i3|sway) ;;
+            *) continue ;;
+        esac
+        env="$pid/environ"
+        [ -r "$env" ] || continue
+        d=$(tr '\0' '\n' < "$env" 2>/dev/null | awk -F= '/^DISPLAY=/{print $2; exit}')
+        if [ "$d" = "$disp" ]; then
+            uid=$(stat -c %u "$pid" 2>/dev/null || true)
+            [ -n "$uid" ] && { printf '%s\n' "$uid"; return 0; }
         fi
     done
-    # Fallback: auto-detect connected output
-    local connected
-    connected=$( "${xargs[@]:-}" xrandr --display "$disp" 2>/dev/null \
-        | awk '/ connected/{print $1; exit}' )
-    if [ -n "$connected" ]; then
-        "${xargs[@]:-}" xrandr --display "$disp" --output "$connected" --auto 2>/dev/null || true
-    fi
+    return 1
 }
 
-SESSION=$(find_x_session) || { echo "No X session found"; exit 0; }
-read -r UID_ DISP XAUTH <<< "$SESSION"
+apply_resize() {
+    local uid="$1" disp="$2" xauth="$3" user
+    user="$(id -nu "$uid" 2>/dev/null || true)"
+    [ -n "$user" ] || { echo "no user for uid=$uid"; return 1; }
 
-# Run as the session user if we are root (runuser keeps DISPLAY/XAUTHORITY; su - login shell does not)
-if [ "$(id -u)" -eq 0 ] && [ "${UID_:-0}" -ne 0 ]; then
-    u="$(id -nu "$UID_" 2>/dev/null)" || exit 0
-    [ -n "$u" ] || exit 0
-    if [ -n "$XAUTH" ]; then
-        runuser -u "$u" -- env DISPLAY="$DISP" XAUTHORITY="$XAUTH" xrandr --auto 2>/dev/null || true
-    else
-        runuser -u "$u" -- env DISPLAY="$DISP" xrandr --auto 2>/dev/null || true
+    # Build the env we'll hand to xrandr
+    local env_args=( DISPLAY="$disp" )
+    [ -n "$xauth" ] && env_args+=( XAUTHORITY="$xauth" )
+
+    # First try plain --auto (works on virtio-gpu without naming the output)
+    if runuser -u "$user" -- env "${env_args[@]}" xrandr --auto 2>>"$LOG"; then
+        echo "  xrandr --auto OK"
+        return 0
     fi
-else
-    DISPLAY="$DISP" ${XAUTH:+XAUTHORITY="$XAUTH"} xrandr --auto 2>/dev/null || true
-fi
+
+    # Fallback: detect the connected output and force --auto on it
+    local connected
+    connected=$(runuser -u "$user" -- env "${env_args[@]}" xrandr 2>/dev/null \
+        | awk '/ connected/{print $1; exit}')
+    if [ -n "$connected" ]; then
+        runuser -u "$user" -- env "${env_args[@]}" xrandr --output "$connected" --auto \
+            2>>"$LOG" && { echo "  xrandr --output $connected --auto OK"; return 0; }
+    fi
+
+    # Final fallback: try every common virtio-gpu output name
+    local out
+    for out in Virtual-1 Virtual-0 Virtual0 Virtual1 VGA-0 VGA-1 HDMI-0; do
+        runuser -u "$user" -- env "${env_args[@]}" xrandr --output "$out" --auto \
+            2>>"$LOG" && { echo "  xrandr --output $out --auto OK"; return 0; }
+    done
+    echo "  all xrandr attempts failed"
+    return 1
+}
+
+# Retry: SPICE may not have negotiated the new mode yet on first udev event.
+attempt() {
+    local s
+    s="$(find_x_session)" || return 1
+    # shellcheck disable=SC2086 # split intentional
+    apply_resize $s
+}
+
+for delay in 0 1 2 3 5 8; do
+    sleep "$delay"
+    attempt && exit 0
+done
+echo "[$(date -Is)] gave up"
+exit 0  # never fail noisily; udev will retry on the next event
 SCRIPT
 chmod +x /usr/local/bin/osi-resize
 
-# Systemd service wrapper (runs as root, su-s to the session user)
+# Truncate the resize log on boot so it doesn't grow forever
+mkdir -p /etc/logrotate.d
+cat > /etc/logrotate.d/osi-resize << 'EOF'
+/var/log/osi-resize.log {
+    weekly
+    rotate 1
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
 cat > /etc/systemd/system/osi-resize.service << 'EOF'
 [Unit]
 Description=OSI SPICE Display Auto-Resize
@@ -116,17 +160,17 @@ After=graphical.target
 Type=oneshot
 ExecStartPre=/bin/sleep 0.3
 ExecStart=/usr/local/bin/osi-resize
+Nice=10
 EOF
 
-# udev: trigger on any DRM connector change (virtio-gpu resize event)
 mkdir -p /etc/udev/rules.d
 cat > /etc/udev/rules.d/99-osi-spice-resize.rules << 'EOF'
-ACTION=="change", SUBSYSTEM=="drm", RUN+="/usr/bin/systemctl start --no-block osi-resize.service"
+# Trigger osi-resize whenever a DRM connector reports a change (SPICE resize).
+ACTION=="change", SUBSYSTEM=="drm", RUN+="/bin/systemctl start --no-block osi-resize.service"
 EOF
 
-# XDG autostart — starts spice-vdagent AND triggers xrandr when session opens
+# ── XDG autostart for spice-vdagent + initial resize ─────────────────────────
 mkdir -p /etc/xdg/autostart
-
 cat > /etc/xdg/autostart/spice-vdagent.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
@@ -137,26 +181,49 @@ Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
 X-XFCE-Autostart-Override=true
-X-systemd-skip=false
 EOF
 
-# Startup resize: apply correct resolution as soon as the session opens.
-# Tries multiple times with increasing delay to handle slow SPICE negotiation.
 cat > /etc/xdg/autostart/osi-startup-resize.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=OSI Startup Resize
 Comment=Apply correct display resolution on login
-Exec=sh -c "for d in 1 2 3; do sleep $d; xrandr --auto 2>/dev/null; done &"
+Exec=sh -c "(for d in 1 2 3 5 8; do sleep \$d; xrandr --auto 2>/dev/null && break; done) &"
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
 X-XFCE-Autostart-Override=true
 EOF
 
-# ── virtio-gpu: force modesetting driver, enable modeset ─────────────────────
+# ── virtio-gpu kernel module + Xorg config ───────────────────────────────────
 cat > /etc/modprobe.d/virtio-gpu.conf << 'EOF'
 options virtio_gpu modeset=1
+EOF
+
+# Quiet QEMU's PC-speaker beep (annoying in VMs)
+cat > /etc/modprobe.d/osi-blacklist.conf << 'EOF'
+blacklist pcspkr
+blacklist snd_pcsp
+EOF
+
+# Preload virtio modules in the initramfs so early-boot sees the disk + net
+mkdir -p /etc/initramfs-tools/conf.d
+cat > /etc/initramfs-tools/conf.d/osi-virtio.conf << 'EOF'
+MODULES=most
+COMPRESS=zstd
+EOF
+mkdir -p /etc/initramfs-tools
+cat > /etc/initramfs-tools/modules << 'EOF'
+# OSI: ensure virtio is present in initramfs even with MODULES=dep
+virtio
+virtio_pci
+virtio_blk
+virtio_scsi
+virtio_net
+virtio_balloon
+virtio_rng
+virtio_console
+virtio_gpu
 EOF
 
 mkdir -p /etc/X11/xorg.conf.d
@@ -179,7 +246,15 @@ Section "Screen"
 EndSection
 EOF
 
-# ── Audio: fix crackling with intel-hda in QEMU ───────────────────────────────
+# ── qemu-guest-agent: clean shutdown + IP reporting from host ────────────────
+if [ -x /usr/sbin/qemu-ga ] || dpkg -s qemu-guest-agent >/dev/null 2>&1; then
+    systemctl enable qemu-guest-agent.service 2>/dev/null || true
+    log "qemu-guest-agent enabled"
+else
+    log "WARN: qemu-guest-agent not installed (added to package list)"
+fi
+
+# ── Audio: pulse defaults that work cleanly on intel-hda emulation ───────────
 mkdir -p /etc/pulse
 cat > /etc/pulse/daemon.conf << 'EOF'
 default-sample-format    = s16le
@@ -201,14 +276,12 @@ FONTFACE="TerminusBold"
 FONTSIZE="16x32"
 EOF
 
-# ── DNS / NetworkManager (VPN- and captive-portal-friendly) ─────────────────
-# Do not use chattr +i or static public DNS in /etc/resolv.conf — that breaks
-# VPN-provided DNS and many enterprise networks. Let NetworkManager refresh
-# resolv.conf per connection instead of fighting systemd-resolved.
+# ── DNS / NetworkManager ─────────────────────────────────────────────────────
+# NM owns resolv.conf via dns=auto. systemd-resolved stays unmasked but the
+# actual stub is bypassed via dns=auto so VPNs keep working.
 systemctl unmask systemd-resolved.service 2>/dev/null || true
 rm -f /etc/resolv.conf
 
-# ── NetworkManager: manage interfaces; NM writes resolv.conf when dns=auto ─────
 mkdir -p /etc/NetworkManager/conf.d
 cat > /etc/NetworkManager/conf.d/10-osi.conf << 'EOF'
 [main]
@@ -223,18 +296,19 @@ managed=true
 wifi.scan-rand-mac-address=yes
 EOF
 
-# ── Docker: overlay2 storage, sane log limits ────────────────────────────────
+# ── Docker: overlay2, sane log limits, DNS *not* hardcoded ───────────────────
+# Letting Docker inherit the host resolver means VPN/captive-portal/enterprise
+# DNS keeps working inside containers too.
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json << 'EOF'
 {
     "storage-driver": "overlay2",
     "log-driver": "json-file",
-    "log-opts": { "max-size": "10m", "max-file": "3" },
-    "dns": ["8.8.8.8", "1.1.1.1"]
+    "log-opts": { "max-size": "10m", "max-file": "3" }
 }
 EOF
 
-# ── Journal: cap size so disk doesn't fill up ─────────────────────────────────
+# ── Journal: cap size so disk doesn't fill ───────────────────────────────────
 mkdir -p /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/osi.conf << 'EOF'
 [Journal]
@@ -244,7 +318,7 @@ MaxRetentionSec=2weeks
 Compress=yes
 EOF
 
-# ── Disable services useless in a VM ─────────────────────────────────────────
+# ── Disable services pointless inside a VM ───────────────────────────────────
 for svc in \
     bluetooth.service \
     ModemManager.service \
@@ -267,8 +341,23 @@ cat > /etc/udev/rules.d/98-osi-tablet.rules << 'EOF'
 ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="QEMU QEMU USB Tablet", TAG+="uaccess"
 EOF
 
-# ── Helper commands ───────────────────────────────────────────────────────────
-# fix-display: manually trigger display resize (run from terminal if SPICE resize stalls)
+# ── Plymouth osi-noir boot splash activation ─────────────────────────────────
+if [ -d /usr/share/plymouth/themes/osi-noir ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    log "activating plymouth theme: osi-noir"
+    plymouth-set-default-theme osi-noir 2>/dev/null || true
+    if command -v update-initramfs >/dev/null 2>&1; then
+        update-initramfs -u 2>/dev/null || true
+    fi
+fi
+
+# Add quiet+splash to GRUB cmdline if not already present
+if [ -f /etc/default/grub ]; then
+    if ! grep -q '\bsplash\b' /etc/default/grub; then
+        sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 quiet splash"/' /etc/default/grub || true
+    fi
+fi
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 cat > /usr/local/bin/fix-display << 'SCRIPT'
 #!/bin/bash
 export DISPLAY="${DISPLAY:-:0}"
@@ -278,7 +367,6 @@ xrandr --auto 2>/dev/null && echo "Done." || echo "xrandr failed — is X runnin
 SCRIPT
 chmod +x /usr/local/bin/fix-display
 
-# fix-clipboard: restart spice-vdagent if clipboard stops working
 cat > /usr/local/bin/fix-clipboard << 'SCRIPT'
 #!/bin/bash
 export DISPLAY="${DISPLAY:-:0}"
@@ -292,7 +380,6 @@ echo "Done. Try copy/paste now."
 SCRIPT
 chmod +x /usr/local/bin/fix-clipboard
 
-# clip: pipe to/from clipboard
 cat > /usr/local/bin/clip << 'SCRIPT'
 #!/bin/bash
 if [ "$#" -gt 0 ] && [ "$1" = "-o" ]; then
@@ -306,4 +393,4 @@ fi
 SCRIPT
 chmod +x /usr/local/bin/clip
 
-echo "[OSI] QEMU/KVM + SPICE fixes applied."
+log "QEMU/KVM + SPICE fixes applied"

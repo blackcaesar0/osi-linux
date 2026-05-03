@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=OSI-Noir
+Comment=OSI Linux cyber-noir, strict B&W. Inherits Adwaita-dark, accents forced to white.
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=OSI-Noir
+MetacityTheme=OSI-Noir
+IconTheme=Adwaita
+CursorTheme=Adwaita
+ButtonLayout=menu:minimize,maximize,close

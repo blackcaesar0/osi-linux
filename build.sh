@@ -260,12 +260,29 @@ fi
 step "Installing apt-get wrapper to strip non-existent repos"
 APT_REAL="$BUILD_DIR/chroot/usr/bin/apt-get.real"
 APT_WRAPPER="$BUILD_DIR/chroot/usr/bin/apt-get"
-cp "$APT_WRAPPER" "$APT_REAL"
-cat > "$APT_WRAPPER" << 'WRAPEOF'
+
+# Lockfile so concurrent builds against the same chroot can't clobber each
+# other's wrapper-vs-real swap. flock blocks until the previous build releases.
+APT_LOCK="$BUILD_DIR/.apt-wrapper.lock"
+mkdir -p "$(dirname "$APT_LOCK")"
+exec 9>"$APT_LOCK"
+if ! flock -n 9; then
+    echo "    Another build holds the apt wrapper lock — waiting..."
+    flock 9
+fi
+
+# Idempotent install: only stash the real binary if we haven't already.
+if [ ! -f "$APT_REAL" ]; then
+    cp -p "$APT_WRAPPER" "$APT_REAL"
+fi
+
+# Write the wrapper atomically (write to .new, then rename) so a crash mid-write
+# can't leave the chroot with a half-written /usr/bin/apt-get.
+cat > "$APT_WRAPPER.new" << 'WRAPEOF'
 #!/bin/bash
 # OSI Linux build wrapper — strips non-existent kali-rolling-updates from
 # sources.list before apt-get update.
-# If the chroot stage is already complete (.build/chroot exists), skip the
+# If the chroot stage is already complete (/build_chroot_done exists), skip the
 # update entirely: the binary stage only needs packages that are pre-installed,
 # and re-running apt-get update hangs on slow CDN mirrors.
 for arg in "$@"; do
@@ -279,8 +296,16 @@ for arg in "$@"; do
 done
 exec /usr/bin/apt-get.real "$@"
 WRAPEOF
-chmod +x "$APT_WRAPPER"
-echo "    Installed wrapper: apt-get → apt-get.real"
+chmod +x "$APT_WRAPPER.new"
+mv -f "$APT_WRAPPER.new" "$APT_WRAPPER"
+
+# Sanity check: the real binary should be an ELF, not our shell wrapper.
+if ! head -c 4 "$APT_REAL" | grep -q $'\x7fELF'; then
+    echo "ERROR: $APT_REAL is not an ELF binary (wrapper ate the real apt-get)."
+    echo "       Run: sudo ./build.sh --clean   to start fresh."
+    exit 1
+fi
+echo "    Installed wrapper: apt-get → apt-get.real (locked)"
 
 step "Stage 2/3: Chroot (installing packages — this is the slow part)"
 # Check if chroot is already complete before running
@@ -480,9 +505,72 @@ if [ -n "$OUTPUT_ISO" ]; then
     ISO_FILE="$OUTPUT_ISO"
 fi
 
-# Fix ownership for the invoking user
-REAL_USER="${SUDO_USER:-$USER}"
-chown "$REAL_USER:$REAL_USER" "$ISO_FILE"
+# Fix ownership for the invoking user. Fall back to logname/getent if the
+# script was invoked via `sudo su` which sometimes nukes SUDO_USER.
+REAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo "")}"
+[ -z "$REAL_USER" ] && REAL_USER="${USER:-root}"
+if id "$REAL_USER" >/dev/null 2>&1; then
+    chown "$REAL_USER:$REAL_USER" "$ISO_FILE" 2>/dev/null || true
+fi
+
+# ── Post-build validation ────────────────────────────────────────────────────
+step "Validating ISO"
+ISO_OK=1
+
+ISO_SIZE_BYTES=$(stat -c %s "$ISO_FILE" 2>/dev/null || echo 0)
+if [ "$ISO_SIZE_BYTES" -lt $((500 * 1024 * 1024)) ]; then
+    echo "  [FAIL] ISO is suspiciously small ($((ISO_SIZE_BYTES / 1024 / 1024)) MB) — expected >=500 MB"
+    ISO_OK=0
+else
+    echo "  [ OK ] size: $(du -h "$ISO_FILE" | cut -f1)"
+fi
+
+# Volume info — every Joliet/RR ISO must have one
+if command -v isoinfo >/dev/null 2>&1; then
+    if isoinfo -d -i "$ISO_FILE" 2>/dev/null | grep -q 'Volume id'; then
+        echo "  [ OK ] isoinfo: volume descriptor present"
+    else
+        echo "  [FAIL] isoinfo: no volume descriptor (ISO is malformed)"
+        ISO_OK=0
+    fi
+fi
+
+# Boot record — confirms it'll actually boot somewhere
+if command -v xorriso >/dev/null 2>&1; then
+    if xorriso -indev "$ISO_FILE" -toc 2>/dev/null | grep -qiE 'El Torito|Boot record'; then
+        echo "  [ OK ] xorriso: El Torito boot record present"
+    else
+        echo "  [WARN] xorriso: no boot record visible — ISO may not boot"
+    fi
+fi
+
+# Kernel + initrd presence
+if command -v isoinfo >/dev/null 2>&1; then
+    LISTING=$(isoinfo -R -l -i "$ISO_FILE" 2>/dev/null || true)
+    if echo "$LISTING" | grep -qiE 'vmlinuz|kernel'; then
+        echo "  [ OK ] kernel image found in ISO"
+    else
+        echo "  [FAIL] no kernel image (vmlinuz) found in ISO"
+        ISO_OK=0
+    fi
+    if echo "$LISTING" | grep -qiE 'initrd'; then
+        echo "  [ OK ] initrd found in ISO"
+    else
+        echo "  [WARN] no initrd found in ISO"
+    fi
+fi
+
+# SHA256 — and write it next to the ISO so it can be re-verified later
+ISO_SHA=$(sha256sum "$ISO_FILE" | cut -d' ' -f1)
+echo "$ISO_SHA  $(basename "$ISO_FILE")" > "$ISO_FILE.sha256"
+[ -n "$REAL_USER" ] && chown "$REAL_USER:$REAL_USER" "$ISO_FILE.sha256" 2>/dev/null || true
+echo "  [ OK ] sha256 written to $(basename "$ISO_FILE").sha256"
+
+if [ "$ISO_OK" -eq 0 ]; then
+    echo ""
+    echo "WARNING: One or more validation checks failed. The ISO is at $ISO_FILE"
+    echo "         but may not boot. Inspect build.log and try --clean."
+fi
 
 echo ""
 echo "============================================"
@@ -491,7 +579,7 @@ echo "============================================"
 echo ""
 echo "  ISO:    $ISO_FILE"
 echo "  Size:   $(du -sh "$ISO_FILE" | cut -f1)"
-echo "  SHA256: $(sha256sum "$ISO_FILE" | cut -d' ' -f1)"
+echo "  SHA256: $ISO_SHA"
 echo ""
 echo "  Test in QEMU:"
 echo "    qemu-system-x86_64 -cdrom $ISO_FILE -m 4G -enable-kvm -boot d"

@@ -165,9 +165,15 @@ fi
 echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
 chmod 0440 /etc/sudoers.d/99-osi-nopasswd
 
-# Set default password (osi:osi — user should change after install)
+# Set default password (osi:osi — user must change after first sudo/login).
+# Both passwords are immediately expired via `chage -d 0`, so PAM forces a
+# password change before anything privileged runs (sudo, su, ssh login,
+# console login). Auto-login can still get to the desktop, but any sudo or
+# su attempt will block until the password is rotated.
 echo "osi:osi" | chpasswd 2>/dev/null || true
 echo "root:toor" | chpasswd 2>/dev/null || true
+chage -d 0 osi  2>/dev/null || true
+chage -d 0 root 2>/dev/null || true
 
 # ── LightDM — auto-login with XFCE in X11 mode ──────────────────────────────
 # Explicitly force X11 session type. spice-vdagent is X11-only — if LightDM

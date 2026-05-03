@@ -1,0 +1,83 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// OSI Linux — Plymouth boot splash (cyber-noir, B&W).
+//
+// Deliberately minimal: only uses Plymouth script primitives that ship in
+// every plymouth ≥ 0.9.4. Pure black canvas, white "OSI LINUX" title,
+// thin progress indicator made of unicode block characters that grows as
+// boot progresses. No images, no logo, no chroma.
+// ─────────────────────────────────────────────────────────────────────────────
+
+Window.SetBackgroundTopColor    (0.0, 0.0, 0.0);
+Window.SetBackgroundBottomColor (0.0, 0.0, 0.0);
+
+w = Window.GetWidth();
+h = Window.GetHeight();
+
+// ── Title + subtitle (drawn once, never updated) ────────────────────────────
+title         = Image.Text("O S I   L I N U X", 0.95, 0.95, 0.95, 1.0, "Sans Bold 22");
+title_sprite  = Sprite(title);
+title_sprite.SetX(w / 2 - title.GetWidth() / 2);
+title_sprite.SetY(h * 0.42);
+
+subtitle        = Image.Text("offensive security initiative", 0.55, 0.55, 0.55, 1.0, "Sans 11");
+subtitle_sprite = Sprite(subtitle);
+subtitle_sprite.SetX(w / 2 - subtitle.GetWidth() / 2);
+subtitle_sprite.SetY(h * 0.42 + 36);
+
+// ── Progress: a row of 60 block characters; we recolor a prefix as boot ─────
+// progresses by drawing the dim row first and the bright row on top with the
+// number of characters scaled to the current boot progress.
+fun blocks(n) {
+    s = "";
+    for (i = 0; i < n; i++) { s = s + "█"; }
+    return s;
+}
+
+bar_total = 60;
+bar_dim   = Image.Text(blocks(bar_total), 0.15, 0.15, 0.15, 1.0, "Mono 8");
+bar_x     = w / 2 - bar_dim.GetWidth() / 2;
+bar_y     = h * 0.58;
+
+bar_dim_sprite = Sprite(bar_dim);
+bar_dim_sprite.SetX(bar_x);
+bar_dim_sprite.SetY(bar_y);
+bar_dim_sprite.SetZ(0);
+
+bar_fg_sprite = Sprite();
+bar_fg_sprite.SetX(bar_x);
+bar_fg_sprite.SetY(bar_y);
+bar_fg_sprite.SetZ(1);
+
+progress = 0.0;
+
+fun refresh_callback() {
+    p = Plymouth.GetBootProgress();
+    if (p > progress) progress = p;
+    if (progress < 0.02) progress = 0.02;
+    n = Math.Int(bar_total * progress);
+    if (n < 1) n = 1;
+    bar_fg_sprite.SetImage(Image.Text(blocks(n), 0.95, 0.95, 0.95, 1.0, "Mono 8"));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+// ── Status line (LUKS prompt, fsck messages) ────────────────────────────────
+status_sprite = Sprite();
+status_sprite.SetY(h * 0.7);
+
+fun show_status(text, r, g, b) {
+    img = Image.Text(text, r, g, b, 1.0, "Mono 13");
+    status_sprite.SetImage(img);
+    status_sprite.SetX(w / 2 - img.GetWidth() / 2);
+}
+
+fun display_message_callback(text)            { show_status(text,   0.85, 0.85, 0.85); }
+fun display_password_callback(prompt, bullets) {
+    pw = "";
+    for (i = 0; i < bullets; i++) { pw = pw + "*"; }
+    show_status(prompt + " " + pw + "_", 0.95, 0.95, 0.95);
+}
+fun display_normal_callback()                  { status_sprite.SetImage(Image.Text("", 0, 0, 0, 0, "Mono 1")); }
+
+Plymouth.SetDisplayMessageFunction  (display_message_callback);
+Plymouth.SetDisplayPasswordFunction (display_password_callback);
+Plymouth.SetDisplayNormalFunction   (display_normal_callback);
