@@ -164,6 +164,7 @@ export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
 lb config \
     --mode debian \
     --initramfs live-boot \
+    --apt-indices false \
     --distribution "$DISTRIBUTION" \
     --archive-areas "main contrib non-free non-free-firmware" \
     --mirror-bootstrap "http://http.kali.org/kali" \
