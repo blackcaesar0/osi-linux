@@ -162,6 +162,10 @@ export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
 # Kali uses a single rolling repo — no separate security or updates repos.
 # Setting --security false prevents live-build from appending /updates which 404s.
 lb config \
+    --mode debian \
+    --initramfs live-boot \
+    --apt-indices false \
+    --syslinux-theme live-build \
     --distribution "$DISTRIBUTION" \
     --archive-areas "main contrib non-free non-free-firmware" \
     --mirror-bootstrap "http://http.kali.org/kali" \
@@ -170,6 +174,7 @@ lb config \
     --keyring-packages kali-archive-keyring \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
+    --linux-packages "linux-image" \
     --bootappend-live "boot=live components username=osi hostname=osi" \
     --apt-options "--yes --option Acquire::Retries=5" \
     --binary-images iso-hybrid \
@@ -198,6 +203,19 @@ for cfg in "$BUILD_DIR/config/common" "$BUILD_DIR/config/bootstrap" "$BUILD_DIR/
         echo "    Patched $cfg"
     fi
 done
+
+# Force the syslinux theme to "live-build" — Kali (and modern Debian) don't
+# ship syslinux-themes-* packages, so the default theme from an Ubuntu host
+# (ubuntu-oneiric) causes lb_binary_syslinux to fail at apt-get install.
+# The "live-build" pseudo-theme uses lb's built-in SVG-to-PNG path via
+# librsvg2-bin, which we already pre-install into the chroot.
+if [ -f "$BUILD_DIR/config/binary" ]; then
+    if grep -q "^LB_SYSLINUX_THEME=" "$BUILD_DIR/config/binary"; then
+        sed -i 's/^LB_SYSLINUX_THEME=.*/LB_SYSLINUX_THEME="live-build"/' \
+            "$BUILD_DIR/config/binary"
+        echo "    Forced LB_SYSLINUX_THEME=live-build"
+    fi
+fi
 # Also scan for any other config files that might have them
 find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
     | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true

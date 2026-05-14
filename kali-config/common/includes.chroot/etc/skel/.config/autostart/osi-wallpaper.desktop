@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OSI wallpaper bootstrap
+Comment=Force the OSI-Noir wallpaper on every monitor regardless of connector name
+Exec=sh -c "$HOME/.config/osi-wallpaper.sh"
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-XFCE-Autostart-Override=true

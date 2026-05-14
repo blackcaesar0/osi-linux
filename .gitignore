@@ -1,5 +1,27 @@
 # live-build workspace
 build/
+build.full.log
+*.iso
+*.iso.sha256
+
+# lb_config artefacts if it ever runs outside build/ by mistake
+/.build/
+/config/archives/
+/config/binary
+/config/binary_*
+/config/bootstrap
+/config/chroot
+/config/chroot_*
+/config/common
+/config/hooks/
+/config/includes/
+/config/includes.*
+/config/package-lists/
+/config/packages
+/config/packages.*
+/config/preseed/
+/config/source
+/config/templates/
 
 # Editor files
 *.swp
