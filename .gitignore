@@ -1,5 +1,8 @@
 # live-build workspace
 build/
+build.full.log
+*.iso
+*.iso.sha256
 
 # Editor files
 *.swp
