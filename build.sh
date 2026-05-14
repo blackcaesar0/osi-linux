@@ -163,6 +163,7 @@ export DEBOOTSTRAP_KEYRING="$KALI_KEYRING"
 # Setting --security false prevents live-build from appending /updates which 404s.
 lb config \
     --mode debian \
+    --initramfs live-boot \
     --distribution "$DISTRIBUTION" \
     --archive-areas "main contrib non-free non-free-firmware" \
     --mirror-bootstrap "http://http.kali.org/kali" \
