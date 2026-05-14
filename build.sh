@@ -170,6 +170,7 @@ lb config \
     --keyring-packages kali-archive-keyring \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
+    --linux-packages "linux-image" \
     --bootappend-live "boot=live components username=osi hostname=osi" \
     --apt-options "--yes --option Acquire::Retries=5" \
     --binary-images iso-hybrid \
