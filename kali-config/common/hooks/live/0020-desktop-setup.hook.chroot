@@ -195,16 +195,8 @@ EOF
 mkdir -p /etc/skel/.config/systemd/user
 ln -sf /dev/null /etc/skel/.config/systemd/user/spice-vdagent.service
 
-# ── Menu / greeter avatar: crisp 64px emblem (full wallpaper looks wrong at panel size)
+# ── Menu / greeter avatar: handled by 0030-osi-branding (B&W mono glyph).
 mkdir -p /usr/share/pixmaps
-if command -v convert &>/dev/null; then
-    convert -size 64x64 xc:"#0b0e14" \
-        -strokewidth 2 -stroke "#00c9a7" -fill none \
-        -draw "roundrectangle 6,6 57,57 10,10" \
-        -strokewidth 0 -font "Hack-Bold" -pointsize 17 -fill "#00c9a7" \
-        -gravity center -annotate +0+1 "OSI" \
-        /usr/share/pixmaps/osi-menu.png 2>/dev/null || true
-fi
 if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/osi.png ]; then
     cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
 fi

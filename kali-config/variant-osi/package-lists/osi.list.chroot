@@ -17,6 +17,9 @@ xfce4-terminal
 xfce4-clipman-plugin
 xfce4-power-manager
 xfce4-whiskermenu-plugin
+xfce4-statusnotifier-plugin
+xfce4-pulseaudio-plugin
+xfce4-notifyd
 lightdm
 lightdm-gtk-greeter
 lightdm-gtk-greeter-settings
