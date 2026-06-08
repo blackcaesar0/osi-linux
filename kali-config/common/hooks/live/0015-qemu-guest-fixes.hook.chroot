@@ -342,13 +342,9 @@ ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="QEMU QEMU USB Tablet", TAG+="ua
 EOF
 
 # ── Plymouth osi-noir boot splash activation ─────────────────────────────────
-if [ -d /usr/share/plymouth/themes/osi-noir ] && command -v plymouth-set-default-theme >/dev/null 2>&1; then
-    log "activating plymouth theme: osi-noir"
-    plymouth-set-default-theme osi-noir 2>/dev/null || true
-    if command -v update-initramfs >/dev/null 2>&1; then
-        update-initramfs -u 2>/dev/null || true
-    fi
-fi
+# Theme activation + initramfs rebuild now lives in 0036-plymouth-assets so it
+# runs AFTER the PNG assets are rendered into the theme dir. Activating here
+# would bake a font-less initramfs.
 
 # Add quiet+splash to GRUB cmdline if not already present
 if [ -f /etc/default/grub ]; then

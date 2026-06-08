@@ -1,0 +1,92 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────────
+# OSI Linux — Plymouth osi-noir asset generator.
+#
+# The Plymouth script intentionally avoids Image.Text() for the title/subtitle
+# because fontconfig is rarely populated in the initramfs and we'd silently end
+# up with a featureless black splash. Instead we render four small PNGs into
+# the theme dir at chroot build time. Plymouth's initramfs hook copies the
+# whole theme directory verbatim, so the PNGs travel with us.
+#
+# Generated files (placed next to osi-noir.script):
+#   title.png       — "OSI LINUX" wordmark, ~600x70px, white on transparent
+#   subtitle.png    — "offensive security initiative", ~360x18px, mid-grey
+#   bar-bg.png      — 600x2 dim white horizontal bar
+#   bar-fg.png      — 600x2 bright white bar (cropped at runtime)
+#
+# After dropping the PNGs we re-run plymouth-set-default-theme so the
+# initramfs is rebuilt with the new assets and update-initramfs -u runs.
+# ──────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+log() { printf '[OSI/plymouth-assets] %s\n' "$*"; }
+
+THEME_DIR=/usr/share/plymouth/themes/osi-noir
+if [ ! -d "$THEME_DIR" ]; then
+    log "WARN: theme dir missing — was the includes overlay applied?"
+    exit 0
+fi
+
+if ! command -v convert >/dev/null 2>&1; then
+    log "ERROR: ImageMagick 'convert' not available — boot splash will be a featureless black screen"
+    exit 0
+fi
+
+# Pick a system mono/sans font for the wordmark. Try Hack first (shipped via
+# fonts-hack), fall back to whatever DejaVu/Liberation is present.
+pick_font() {
+    local kind="$1"  # "mono" or "sans"
+    local candidates_mono="Hack-Bold DejaVu-Sans-Mono-Bold Liberation-Mono-Bold"
+    local candidates_sans="DejaVu-Sans-Bold Liberation-Sans-Bold Hack-Bold"
+    local cands; case "$kind" in
+        mono) cands="$candidates_mono" ;;
+        *)    cands="$candidates_sans" ;;
+    esac
+    for c in $cands; do
+        if convert -list font 2>/dev/null | grep -qw "$c"; then
+            printf '%s\n' "$c"; return 0
+        fi
+    done
+    # Last resort — let ImageMagick pick a default
+    printf '%s\n' ""
+}
+
+TITLE_FONT=$(pick_font sans)
+SUB_FONT=$(pick_font mono)
+
+log "title font: ${TITLE_FONT:-<imagemagick default>}"
+log "sub font:   ${SUB_FONT:-<imagemagick default>}"
+
+font_arg() {
+    local f="$1"
+    [ -n "$f" ] && printf -- '-font %s\n' "$f" || printf '\n'
+}
+
+# ── title.png — 600x70 "OSI LINUX" wide-tracked, white on transparent ───────
+convert -size 600x70 xc:transparent \
+    $(font_arg "$TITLE_FONT") -pointsize 36 -fill "#ffffff" \
+    -gravity center -annotate +0+0 "O S I   L I N U X" \
+    "$THEME_DIR/title.png" 2>/dev/null
+
+# ── subtitle.png — 420x22 secondary, mid-grey ───────────────────────────────
+convert -size 420x22 xc:transparent \
+    $(font_arg "$SUB_FONT") -pointsize 12 -fill "#888888" \
+    -gravity center -annotate +0+0 "offensive security initiative" \
+    "$THEME_DIR/subtitle.png" 2>/dev/null
+
+# ── bar-bg.png — 600x2 dim grey ─────────────────────────────────────────────
+convert -size 600x2 xc:"#202020" "$THEME_DIR/bar-bg.png" 2>/dev/null
+
+# ── bar-fg.png — 600x2 bright white ─────────────────────────────────────────
+convert -size 600x2 xc:"#ffffff" "$THEME_DIR/bar-fg.png" 2>/dev/null
+
+log "rendered: $(ls -1 "$THEME_DIR"/*.png 2>/dev/null | wc -l) PNGs in $THEME_DIR"
+
+# Make sure the theme is the active default and rebuild the initramfs so the
+# new PNGs are bundled in.
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    plymouth-set-default-theme osi-noir 2>/dev/null || true
+fi
+if command -v update-initramfs >/dev/null 2>&1; then
+    log "regenerating initramfs to include osi-noir assets"
+    update-initramfs -u 2>/dev/null || true
+fi
