@@ -33,7 +33,7 @@ mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
 cat > /etc/skel/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
 gtk-icon-theme-name=Papirus-Dark
-gtk-theme-name=Arc-Dark
+gtk-theme-name=OSI-Noir
 gtk-font-name=Hack 10
 gtk-cursor-theme-name=Adwaita
 gtk-cursor-theme-size=24
@@ -52,7 +52,7 @@ cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
 # GTK2 settings (for older apps like wireshark)
 cat > /etc/skel/.gtkrc-2.0 << 'EOF'
 gtk-icon-theme-name="Papirus-Dark"
-gtk-theme-name="Arc-Dark"
+gtk-theme-name="OSI-Noir"
 gtk-font-name="Hack 10"
 gtk-cursor-theme-name="Adwaita"
 gtk-cursor-theme-size=24
@@ -102,44 +102,45 @@ cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
 </fontconfig>
 EOF
 
-# ── OSI accent overlay (works with Arc-Dark; keeps distro identity off Kali chrome) ─
+# ── OSI-Noir panel/menu overlay (strict B&W; layers on the OSI-Noir GTK theme) ─
 mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
 cat > /etc/skel/.config/gtk-3.0/gtk.css << 'EOF'
-/* OSI Linux — GTK 3 accent on Arc-Dark */
+/* OSI Linux — panel + Whisker Menu accents. Strict B&W, matches OSI-Noir. */
 #xfce4-panel.background,
 #xfce4-panel {
   background-image: none;
-  background-color: #0b0e14;
-  color: #c8d0dc;
+  background-color: #0a0a0a;
+  color: #c8c8c8;
   border: none;
 }
 #xfce4-panel button:hover {
-  background-color: rgba(0, 201, 167, 0.12);
+  background-color: #1f1f1f;
 }
 #xfce4-panel .tasklist button:checked {
-  background-color: rgba(0, 201, 167, 0.22);
+  background-color: #2a2a2a;
+  color: #ffffff;
 }
-/* Whisker Menu — dark shell + teal selection */
+/* Whisker Menu — black shell, inverted (white-on-black) selection */
 .whiskermenu-window,
 #whiskermenu-window {
-  background-color: #0e141a;
-  color: #c8d0dc;
+  background-color: #0a0a0a;
+  color: #c8c8c8;
 }
 .whiskermenu-window treeview.view:selected,
 .whiskermenu-window treeview.view:selected:focus,
 .whiskermenu-window iconview.view:selected {
-  background-color: rgba(0, 201, 167, 0.45);
-  color: #0b0e14;
+  background-color: #ffffff;
+  color: #000000;
 }
 .whiskermenu-window entry {
-  background-color: #131920;
-  color: #c8d0dc;
-  border-color: rgba(0, 201, 167, 0.35);
+  background-color: #141414;
+  color: #ffffff;
+  border-color: #3a3a3a;
 }
 .whiskermenu-window .sidebar-item:selected,
 .whiskermenu-window list row:selected {
-  background-color: rgba(0, 201, 167, 0.25);
-  color: #f0f4f8;
+  background-color: #ffffff;
+  color: #000000;
 }
 EOF
 cp /etc/skel/.config/gtk-3.0/gtk.css /etc/skel/.config/gtk-4.0/gtk.css
@@ -201,20 +202,28 @@ if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/o
     cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
 fi
 
-# LightDM greeter theme (Arc-Dark + OSI wallpaper)
-cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
+# ── LightDM greeter ──────────────────────────────────────────────────────────
+# The canonical greeter config is shipped via includes.chroot
+# (etc/lightdm/lightdm-gtk-greeter.conf) and uses the OSI-Noir theme. This hook
+# runs AFTER the includes overlay is applied, so writing the file here
+# unconditionally would silently clobber the shipped B&W config with a
+# different theme. Only write a fallback if the shipped file is absent.
+if [ ! -s /etc/lightdm/lightdm-gtk-greeter.conf ]; then
+    echo "[OSI] no shipped greeter config found — writing OSI-Noir fallback"
+    cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
 [greeter]
-theme-name=Arc-Dark
+theme-name=OSI-Noir
 icon-theme-name=Papirus-Dark
-font-name=Hack 10
+font-name=Hack 11
 background=/usr/share/backgrounds/osi/osi.png
 user-background=false
+hide-user-image=true
 position=50%,center 50%,center
-default-user-image=/usr/share/pixmaps/osi-menu.png
-indicators=~host;~spacer;~clock;~spacer;~session;~power
-clock-format=%H:%M  |  %Y-%m-%d
+indicators=~spacer;~clock;~spacer;~session;~power
+clock-format=%Y-%m-%d  %H:%M
 active-monitor=#cursor
 EOF
+fi
 
 # ── XFCE default session ─────────────────────────────────────────────────────
 mkdir -p /etc/skel/.config/xfce4

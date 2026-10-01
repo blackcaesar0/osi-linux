@@ -133,12 +133,25 @@ fix-display      # re-trigger xrandr auto-resize
 fix-clipboard    # restart spice-vdagent
 ```
 
+### Guest helper commands
+
+| Command | Action |
+|---------|--------|
+| `fix-display` | Re-trigger `xrandr --auto` after a stuck resize |
+| `fix-clipboard` | Restart `spice-vdagent` |
+| `clip` | Pipe stdin to the clipboard, or `clip -o` to read it back |
+| `osi-update` | Update and upgrade APT packages; `--all` also upgrades pipx tools |
+
+The shipped documentation is also installed inside the image at
+`/usr/share/doc/osi/`.
+
 ---
 
 ## Project Structure
 
 ```
 osi-linux/
+├── Makefile                 Common tasks — run `make` for the list
 ├── build.sh                 Build script (wraps Kali live-build)
 ├── launch-vm.sh             QEMU/KVM launcher (virtio-gpu + SPICE)
 ├── config/                  Desktop configs (xfce4, tmux, vim, shell)
@@ -146,15 +159,21 @@ osi-linux/
 │   ├── variant-osi/
 │   │   └── package-lists/   Curated package selection
 │   └── common/
-│       ├── hooks/live/      Build-time config hooks
-│       │   ├── 0010-system-config     System tuning + SPICE + virtio-gpu
-│       │   ├── 0015-qemu-guest-fixes  10 QEMU/KVM bug fixes
-│       │   ├── 0020-desktop-setup     XFCE + user + LightDM
-│       │   └── 0030-osi-branding      Branding + wallpaper + cleanup
+│       ├── hooks/live/      Build-time config hooks (run in numeric order)
+│       │   ├── 0010-system-config     sysctl, limits, services, virtio modules
+│       │   ├── 0015-qemu-guest-fixes  SPICE clipboard/resize, virtio-gpu, helpers
+│       │   ├── 0020-desktop-setup     XFCE, OSI-Noir GTK, LightDM, live user
+│       │   ├── 0030-osi-branding      os-release, banners, wallpaper, cleanup
+│       │   ├── 0031-grub-theme        GRUB 2 OSI-Noir theme
+│       │   ├── 0035-osi-noir-theme    xfwm4 pixmaps, mono icons, GTK defaults
+│       │   ├── 0040-pentest-setup     Metasploit DB, tool config, shell helpers
+│       │   └── 0050-first-boot        One-shot: SSH host keys, msfdb, self-removal
 │       └── includes.chroot/ Files overlaid into the rootfs
 ├── scripts/
 │   ├── create-vm.sh         Create qcow2 disk + boot installer
-│   └── cleanup-host.sh      Remove build artifacts
+│   ├── cleanup-host.sh      Remove build artifacts
+│   └── check-theme.sh       Enforce strict B&W + config/skel sync
+├── .github/workflows/       CI: lint and consistency checks
 ├── wallpaper/               OSI wallpaper
 └── docs/
 ```
@@ -178,3 +197,31 @@ Add hook scripts in `kali-config/common/hooks/live/` — they run inside the chr
 ### Add files to the rootfs
 
 Place files in `kali-config/common/includes.chroot/` — they're overlaid directly onto the filesystem. For example, `includes.chroot/etc/foo.conf` becomes `/etc/foo.conf` in the ISO.
+
+> Build hooks run **after** the `includes.chroot` overlay is applied, so a hook
+> that writes a file unconditionally will overwrite whatever the overlay shipped
+> at that path. Write a fallback only when the file is missing.
+
+---
+
+## Development
+
+Run the full check suite before pushing:
+
+```sh
+make check        # lint + theme consistency + repo invariants
+make              # list every available target
+```
+
+| Gate | What it enforces |
+|------|------------------|
+| `make lint` | Every shell script parses and is shellcheck-clean at warning severity |
+| `make check-theme` | Every colour in a theme file is grayscale, and `config/` matches its `/etc/skel` mirror |
+| `make check-repo` | Build hooks are executable and the package list has no duplicates |
+
+The theme gate is what keeps OSI-Noir honest: "strict black-and-white" is
+checked mechanically rather than trusted, so an accent colour cannot creep back
+in through a copied snippet or an upstream default. After editing anything in
+`config/`, run `make sync-skel` to refresh the `/etc/skel` overlay copy.
+
+The same suite runs in CI on every push and pull request.

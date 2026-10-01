@@ -121,6 +121,14 @@ cp "$PROJECT_DIR/wallpaper/osi.png"                "$SKEL/wallpaper/"
 mkdir -p "$INCLUDES/usr/share/backgrounds/osi"
 cp "$PROJECT_DIR/wallpaper/osi.png"                "$INCLUDES/usr/share/backgrounds/osi/"
 
+# Documentation — /etc/motd points users at /usr/share/doc/osi/.
+# Regenerated from docs/ on every build; git-ignored (see .gitignore).
+DOCDIR="$INCLUDES/usr/share/doc/osi"
+mkdir -p "$DOCDIR"
+cp "$PROJECT_DIR/README.md" "$DOCDIR/README.md"
+cp "$PROJECT_DIR/docs/"*.md "$DOCDIR/" 2>/dev/null || true
+echo "    Staged $(find "$DOCDIR" -name '*.md' | wc -l) doc file(s) into /usr/share/doc/osi"
+
 # genisoimage rejects files >4GB without -allow-limited-size.
 # Must be exported BEFORE lb config so lb_config writes it into config/common.
 # lb_binary_iso sources config/common via Read_conffiles, which would otherwise
@@ -217,11 +225,12 @@ if [ -f "$BUILD_DIR/config/binary" ]; then
     fi
 fi
 # Also scan for any other config files that might have them
-find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
-    | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true
+find "$BUILD_DIR/config" -type f -print0 2>/dev/null \
+    | xargs -r -0 grep -lZ 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
+    | xargs -r -0 sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true
 # Remove any pre-seeded sources.list files that reference -updates
-find "$BUILD_DIR/config" -type f 2>/dev/null \
-    | xargs -r sed -i '/-updates/d' 2>/dev/null || true
+find "$BUILD_DIR/config" -type f -print0 2>/dev/null \
+    | xargs -r -0 sed -i '/-updates/d' 2>/dev/null || true
 
 # Belt-and-suspenders: tell apt inside the chroot to treat missing repos as
 # warnings instead of fatal errors. live-build copies config/apt/apt.conf.d/*

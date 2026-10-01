@@ -69,10 +69,19 @@ The ISO is configured by chroot hooks that run during build. They execute in num
 
 | Hook | Purpose |
 |------|---------|
-| `0010-system-config` | sysctl, services, virtio-gpu, SPICE resize, GRUB, boot speed |
-| `0015-qemu-guest-fixes` | 10 QEMU/KVM bug fixes (audio, clipboard, DNS, entropy, etc.) |
-| `0020-desktop-setup` | XFCE session, GTK theme, font rendering, LightDM, live user |
-| `0030-osi-branding` | os-release, MOTD, wallpaper generation, clipman, cleanup |
+| `0010-system-config` | sysctl tuning, resource limits, virtio module loading, service enablement, GRUB timeout |
+| `0015-qemu-guest-fixes` | SPICE clipboard and auto-resize, virtio-gpu, Xorg, audio, DNS, journald caps, `fix-display` / `fix-clipboard` / `clip` / `osi-update` helpers |
+| `0020-desktop-setup` | XFCE session, OSI-Noir GTK settings, font rendering, LightDM autologin, live user, workspace tree |
+| `0030-osi-branding` | `os-release`, issue/MOTD banners, wallpaper fallbacks, menu glyph, clipman autostart, apt cleanup |
+| `0031-grub-theme` | GRUB 2 OSI-Noir theme (text and 1px rules only, so it renders on any firmware) |
+| `0035-osi-noir-theme` | Seeds and desaturates xfwm4 pixmaps, mono icon folders, system-wide GTK defaults, icon caches |
+| `0040-pentest-setup` | Metasploit database, pip/proxychains/SSH client config, shell helper functions, wordlists |
+| `0050-first-boot` | One-shot service: regenerates SSH host keys per install, initialises the Metasploit DB, then removes itself |
+
+Hooks run inside the chroot in numeric order, **after** the `includes.chroot`
+overlay has been applied. A hook that writes a file unconditionally therefore
+overwrites whatever the overlay shipped at that path — prefer writing a
+fallback only when the file is absent.
 
 ---
 
@@ -105,6 +114,30 @@ Files in `kali-config/common/includes.chroot/` are copied directly into the file
 ```
 kali-config/common/includes.chroot/etc/motd  ->  /etc/motd in the ISO
 ```
+
+---
+
+## Quality Gates
+
+Before pushing a change, run the full check suite:
+
+```sh
+make check
+```
+
+It runs three gates, all of which also run in CI:
+
+| Gate | What it enforces |
+|------|------------------|
+| `make lint` | Every shell script parses (`bash -n`) and is shellcheck-clean at warning severity |
+| `make check-theme` | Every colour in a theme file is grayscale, and `config/` matches its `/etc/skel` mirror |
+| `make check-repo` | Build hooks are executable and the package list has no duplicates |
+
+The theme gate exists because OSI-Noir is specified as strict black-and-white.
+A copied snippet or an upstream default can quietly reintroduce an accent
+colour, so the rule is checked rather than trusted. If you intentionally
+change a config under `config/`, run `make sync-skel` to update the overlay
+copy.
 
 ---
 

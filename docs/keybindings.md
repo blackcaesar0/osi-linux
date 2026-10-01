@@ -33,6 +33,7 @@
 | `pbcopy` / `pbpaste` | Copy/paste via xclip |
 | `echo text \| clip` | Pipe to clipboard |
 | `clip -o` | Paste from clipboard |
+| `osi-update` | Update APT packages (`--all` also upgrades pipx tools) |
 
 ## tmux
 

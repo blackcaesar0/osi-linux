@@ -13,6 +13,10 @@
 #   VM_CORES=4  VM_THREADS=2  VM_RAM=8G  DISK_IMAGE=~/VM/osi.qcow2
 #   NO_GL=1     (disable GL, use manual SPICE connection)
 # ──────────────────────────────────────────────────────────────────────────────
+# QEMU device/drive arguments are single strings whose fields are comma
+# separated (e.g. "file=$DISK,if=none,format=qcow2"). ShellCheck reads those
+# commas as mistaken array element separators; they are intentional here.
+# shellcheck disable=SC2054
 set -euo pipefail
 
 DISK="${DISK_IMAGE:-$HOME/VM/osi-linux.qcow2}"

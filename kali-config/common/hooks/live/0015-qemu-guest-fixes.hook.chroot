@@ -393,4 +393,49 @@ fi
 SCRIPT
 chmod +x /usr/local/bin/clip
 
+cat > /usr/local/bin/osi-update << 'SCRIPT'
+#!/bin/bash
+# OSI Linux — update the system (and optionally user tool installs).
+#   osi-update          APT packages only
+#   osi-update --all    APT packages + pipx packages
+set -uo pipefail
+
+SUDO=""
+[ "$(id -u)" -ne 0 ] && SUDO="sudo"
+
+ALL=0
+case "${1:-}" in
+    --all)     ALL=1 ;;
+    -h|--help)
+        echo "Usage: osi-update [--all]"
+        echo "  (no args)   update and upgrade APT packages"
+        echo "  --all       additionally upgrade pipx-installed tools"
+        exit 0 ;;
+    "")        ;;
+    *)         echo "osi-update: unknown option '$1' (try --help)" >&2; exit 1 ;;
+esac
+
+echo "==> Refreshing package lists"
+$SUDO apt-get update || { echo "osi-update: apt-get update failed" >&2; exit 1; }
+
+echo "==> Upgrading packages"
+$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y full-upgrade
+
+echo "==> Removing orphaned packages"
+$SUDO apt-get -y autoremove --purge
+$SUDO apt-get clean
+
+if [ "$ALL" -eq 1 ] && command -v pipx >/dev/null 2>&1; then
+    echo "==> Upgrading pipx tools"
+    pipx upgrade-all || true
+fi
+
+echo
+echo "==> Update complete."
+if [ -d /var/run/reboot-required ] || [ -f /var/run/reboot-required ]; then
+    echo "    A reboot is required to finish applying kernel updates."
+fi
+SCRIPT
+chmod +x /usr/local/bin/osi-update
+
 log "QEMU/KVM + SPICE fixes applied"
