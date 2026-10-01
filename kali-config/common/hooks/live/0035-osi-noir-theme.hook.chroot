@@ -43,10 +43,34 @@ if [ -n "$SRC" ]; then
     fi
 
     if command -v convert >/dev/null 2>&1; then
-        log "desaturating xfwm4 pixmaps to grayscale"
+        # Desaturating alone is not enough. The seed themes (Default, Daloa) are
+        # LIGHT, so a grayscale copy is a LIGHT GREY theme: title bars rendered
+        # at #c5c5c5 while themerc asked for #0a0a0a, and because xfwm4 prefers
+        # pixmaps over themerc colours when both exist, the themerc was ignored.
+        # With active_text_color=#ffffff that left white text on light grey —
+        # near unreadable, and nothing like the intended black.
+        #
+        # Treat the two kinds of pixmap differently:
+        #   frame pieces (title/top/bottom/left/right) -> flat noir fill, so the
+        #       window chrome matches themerc exactly
+        #   buttons -> grayscale then invert, turning the dark glyphs of a light
+        #       theme into light glyphs that read against the dark bar
+        log "recolouring xfwm4 pixmaps to the OSI-Noir palette"
         for f in "$XFWM_DST"/*.xpm "$XFWM_DST"/*.png; do
             [ -f "$f" ] || continue
-            convert "$f" -colorspace Gray "$f" 2>/dev/null || true
+            base="$(basename "$f")"
+            case "$base" in
+                title-*|top-*|bottom-*|left-*|right-*)
+                    case "$base" in
+                        *-inactive.*) fill="#000000" ;;
+                        *)            fill="#0a0a0a" ;;
+                    esac
+                    convert "$f" -alpha off -fill "$fill" -colorize 100% "$f" 2>/dev/null || true
+                    ;;
+                *)
+                    convert "$f" -colorspace Gray -channel RGB -negate "$f" 2>/dev/null || true
+                    ;;
+            esac
         done
     fi
 
@@ -57,11 +81,42 @@ else
     log "WARN: no source xfwm4 theme found; window borders will fall back to defaults"
 fi
 
-# ── icon theme: keep Adwaita, but if papirus-folders is around, mono-ify it ──
-if command -v papirus-folders >/dev/null 2>&1 && [ -d /usr/share/icons/Papirus-Dark ]; then
-    log "papirus-folders → grey"
-    papirus-folders -C grey --theme Papirus-Dark || true
-fi
+# ── icon theme: force Papirus folders to grey ────────────────────────────────
+# Papirus ships pre-made colour variants (folder-grey-*.svg) and the upstream
+# "papirus-folders" helper does nothing more than re-point the folder-*.svg
+# symlinks at one colour. That helper is a third-party script and is NOT
+# packaged in Kali, so the previous `command -v papirus-folders` guard always
+# fell through — leaving folder.svg symlinked to folder-blue.svg and filling a
+# strictly black-and-white desktop with bright blue folders in Thunar, the
+# sidebar and every file dialog.
+#
+# Re-point the symlinks directly instead, so the result depends on nothing but
+# the icon theme itself.
+recolour_papirus_folders() {
+    local theme_dir="$1" colour="$2"
+    local dir variant base target
+    [ -d "$theme_dir" ] || return 0
+    for dir in "$theme_dir"/*/places; do
+        [ -d "$dir" ] || continue
+        for variant in "$dir/folder-${colour}"*.svg; do
+            [ -e "$variant" ] || continue
+            base="$(basename "$variant")"
+            if [ "$base" = "folder-${colour}.svg" ]; then
+                target="folder.svg"
+            else
+                target="folder-${base#folder-"${colour}"-}"
+            fi
+            ln -sf "$base" "$dir/$target"
+        done
+    done
+}
+
+for _theme in /usr/share/icons/Papirus-Dark /usr/share/icons/Papirus /usr/share/icons/Papirus-Light; do
+    if [ -d "$_theme" ]; then
+        log "recolouring $(basename "$_theme") folders → grey"
+        recolour_papirus_folders "$_theme" grey
+    fi
+done
 
 # ── force theme defaults system-wide (in addition to per-user xfconf xml) ────
 mkdir -p /etc/gtk-3.0 /etc/gtk-4.0
@@ -79,7 +134,7 @@ gtk-enable-input-feedback-sounds=false
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle=hintslight
-gtk-xft-rgba=rgb
+gtk-xft-rgba=none
 EOF
 cp /etc/gtk-3.0/settings.ini /etc/gtk-4.0/settings.ini
 

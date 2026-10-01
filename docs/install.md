@@ -5,7 +5,7 @@
 You need a **Debian, Ubuntu, or Kali** host with at least 30 GB free disk space.
 
 ```sh
-sudo apt install git live-build simple-cdd cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts isolinux syslinux-common
 ```
 
 If building on a non-Kali host, you also need the Kali archive keyring. The build script installs it automatically, or you can do it manually:
@@ -61,7 +61,9 @@ After installing and shutting down:
 ./launch-vm.sh
 ```
 
-The SPICE display opens automatically with GL acceleration. Clipboard and auto-resize work immediately.
+The SPICE display opens automatically. Clipboard and auto-resize work immediately.
+GL/virgl acceleration is opt-in with `GL=1 ./launch-vm.sh`; it needs an AMD or Intel
+host with Mesa drivers and fails on the NVIDIA proprietary driver, so it is off by default.
 
 ### No-GL mode (headless hosts)
 

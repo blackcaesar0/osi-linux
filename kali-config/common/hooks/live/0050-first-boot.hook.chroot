@@ -35,6 +35,9 @@ echo "[$(date -Is)] first boot starting"
 echo "[$(date -Is)] regenerating SSH host keys"
 rm -f /etc/ssh/ssh_host_*
 ssh-keygen -A || echo "  ssh-keygen -A failed (non-fatal)"
+# If sshd somehow started first (manual start, altered ordering), make it pick
+# up the new keys instead of serving the shared ones until the next reboot.
+systemctl try-restart ssh.service 2>/dev/null || true
 echo "[$(date -Is)] SSH host keys regenerated"
 
 # ── Metasploit DB (with timeout — must not hang forever) ────────────────────
@@ -68,6 +71,10 @@ cat > /etc/systemd/system/osi-first-boot.service << 'EOF'
 [Unit]
 Description=OSI Linux first-boot setup
 After=network.target postgresql.service
+# Run before sshd so it never serves the image's baked-in host keys. Without
+# this, ssh.service starts first, publishes the keys every copy of the ISO
+# shares, and only picks up the regenerated ones after a reboot.
+Before=ssh.service
 ConditionPathExists=/usr/local/bin/osi-first-boot
 
 [Service]

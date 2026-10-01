@@ -93,9 +93,7 @@ if command -v convert >/dev/null 2>&1; then
         convert -size 1x1 xc:"#ffffff" "$THEME_DIR/$f" 2>/dev/null || true
     done
     # terminal box: 9-slice with thin white border on black
-    for f in terminal_box_c.png; do
-        convert -size 1x1 xc:"#000000" "$THEME_DIR/$f" 2>/dev/null || true
-    done
+    convert -size 1x1 xc:"#000000" "$THEME_DIR/terminal_box_c.png" 2>/dev/null || true
     for f in terminal_box_n.png terminal_box_s.png terminal_box_e.png terminal_box_w.png \
              terminal_box_ne.png terminal_box_nw.png terminal_box_se.png terminal_box_sw.png; do
         convert -size 1x1 xc:"#c8c8c8" "$THEME_DIR/$f" 2>/dev/null || true
@@ -103,7 +101,11 @@ if command -v convert >/dev/null 2>&1; then
 fi
 
 mkdir -p /etc/default/grub.d
-cat > /etc/default/grub.d/99-osi-theme.cfg << 'EOF'
+# Named to sort AFTER kali-themes.cfg. grub-mkconfig sources this directory in
+# glob order and last write wins; '9' sorts before 'k', so the old
+# 99-osi-theme.cfg was silently overridden by Kali's own theme config.
+rm -f /etc/default/grub.d/99-osi-theme.cfg
+cat > /etc/default/grub.d/zz-osi-theme.cfg << 'EOF'
 # OSI Linux — GRUB branding (sourced by grub-mkconfig)
 GRUB_DISTRIBUTOR="OSI Linux"
 GRUB_THEME=/boot/grub/themes/OSI-Noir/theme.txt

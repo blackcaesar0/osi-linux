@@ -5,15 +5,17 @@
 | Binding | Action |
 |---------|--------|
 | `Ctrl+Alt+T` | Open terminal |
-| `Ctrl+Alt+Del` | Lock screen |
+| `Ctrl+Alt+L` / `Super+L` | Lock screen (`xflock4`) |
+| `Ctrl+Alt+Del` | Log out / shutdown dialog (`xfce4-session-logout`) |
 | `Super+D` | Show desktop |
 | `Alt+F2` | App finder |
 | `Print` | Screenshot (full screen) |
 | `Shift+Print` | Screenshot (select region) |
 | `Alt+F4` | Close window |
-| `Alt+F9` | Minimize window |
-| `Alt+F10` | Maximize/restore window |
 | `Alt+F11` | Fullscreen |
+
+Minimize and maximize have no default key binding in Kali's XFCE; bind them
+yourself under Settings → Window Manager → Keyboard if you want them.
 | `Alt+Tab` | Switch windows |
 | `Ctrl+Alt+Left/Right` | Switch workspace |
 
@@ -33,6 +35,7 @@
 | `pbcopy` / `pbpaste` | Copy/paste via xclip |
 | `echo text \| clip` | Pipe to clipboard |
 | `clip -o` | Paste from clipboard |
+| `osi-update` | Update APT packages (`--all` also upgrades pipx tools) |
 
 ## tmux
 

@@ -1,13 +1,20 @@
 /*
  * OSI-Noir — GTK 3 theme. Strict B&W.
  *
- * Self-contained: we don't @import Adwaita-dark (the Adwaita GResource path
- * varies per distro/GTK build and a wrong import silently leaves the theme
- * half-applied). Instead we override the GTK named colors that every built-in
- * widget rule reads from, and explicitly style the high-traffic widgets.
- * Anything we don't style falls back to GTK's built-in widget rules — which
- * read our @theme_* overrides — so the result is fully monochrome.
+ * GTK 3 does NOT merge a named theme with a built-in default sheet: the
+ * resolved theme's gtk.css IS the entire stylesheet. libgtk ships no generic
+ * fallback resource — only /org/gtk/libgtk/theme/{Adwaita,HighContrast,...} —
+ * so without the import below, padding, min-width, min-height and
+ * -gtk-icon-source all fall back to their initial values. The result was
+ * buttons with no chrome at all and entries collapsed to a bare 1px box.
+ * /usr/share/themes/Adwaita-dark/gtk-3.0/gtk.css is a single line doing
+ * exactly this import, which is the supported pattern.
+ *
+ * The import supplies geometry; the rules below restate every colour in the
+ * OSI-Noir grayscale, and the clamp block at the end of this file neutralises
+ * the chroma Adwaita hardcodes as literals.
  */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
 
 /* ── palette ──────────────────────────────────────────────────────────── */
 @define-color osi_bg       #0a0a0a;
@@ -158,3 +165,56 @@ tooltip, tooltip.background {
 *:link, *.link, link, .link { color: @osi_fg_hi; }
 *:link:visited, .link:visited { color: @osi_muted; }
 .accent, accent { color: @osi_fg_hi; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Neutralise the chroma the imported Adwaita base sheet hardcodes.
+ *
+ * The @import above supplies the geometry GTK3 needs (padding, min-width,
+ * min-height, -gtk-icon-source). It also hardcodes blue accents as literal
+ * colours that @define-color cannot reach, so every widget that would show
+ * Adwaita blue is restated here in the OSI-Noir grayscale.
+ * ────────────────────────────────────────────────────────────────────────── */
+check, radio {
+    background-image: none;
+    background-color: @osi_bg_hi;
+    border-color: @osi_border_hi;
+    color: @osi_fg;
+}
+check:checked, radio:checked,
+check:indeterminate, radio:indeterminate {
+    background-image: none;
+    background-color: @osi_fg_hi;
+    border-color: @osi_fg_hi;
+    color: @osi_accent_fg;
+}
+switch:checked { background-color: @osi_fg_hi; background-image: none; }
+switch slider, switch:checked slider { background-image: none; }
+progressbar progress,
+levelbar block.filled,
+scale highlight {
+    background-color: @osi_fg_hi;
+    background-image: none;
+}
+treeview.view:selected, treeview.view:selected:focus,
+row:selected, list row:selected, iconview.view:selected,
+textview text selection, label selection, entry selection {
+    background-color: @osi_accent;
+    color: @osi_accent_fg;
+}
+treeview.view.expander { color: @osi_muted; }
+treeview.view.expander:hover,
+treeview.view.expander:selected { color: @osi_fg_hi; }
+entry:focus, spinbutton:focus, button:focus {
+    box-shadow: inset 0 0 0 1px @osi_fg_hi;
+    outline-color: @osi_fg_hi;
+}
+* {
+    outline-color: alpha(@osi_fg_hi, 0.5);
+    -gtk-secondary-caret-color: @osi_muted;
+}
+infobar.error, infobar.warning, infobar.question, infobar.info {
+    background-image: none;
+    background-color: @osi_bg_hi;
+    color: @osi_fg_hi;
+}
+spinner { color: @osi_fg_hi; }

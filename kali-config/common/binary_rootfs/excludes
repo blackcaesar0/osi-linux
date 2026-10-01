@@ -2,3 +2,10 @@
 # 99-osi-build.conf is written on the build host chroot only to silence needrestart during lb binary_syslinux;
 # it must not appear on the installed/live system.
 etc/needrestart/conf.d/99-osi-build.conf
+
+# Build-only artefacts. apt-get is restored before the binary stage, but if a
+# run is interrupted these must never reach filesystem.squashfs — a shipped
+# apt-get wrapper would rewrite sources.list on every call and silently no-op
+# `apt-get update`.
+usr/bin/apt-get.real
+build_chroot_done

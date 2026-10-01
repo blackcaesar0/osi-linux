@@ -121,6 +121,14 @@ cp "$PROJECT_DIR/wallpaper/osi.png"                "$SKEL/wallpaper/"
 mkdir -p "$INCLUDES/usr/share/backgrounds/osi"
 cp "$PROJECT_DIR/wallpaper/osi.png"                "$INCLUDES/usr/share/backgrounds/osi/"
 
+# Documentation — /etc/motd points users at /usr/share/doc/osi/.
+# Regenerated from docs/ on every build; git-ignored (see .gitignore).
+DOCDIR="$INCLUDES/usr/share/doc/osi"
+mkdir -p "$DOCDIR"
+cp "$PROJECT_DIR/README.md" "$DOCDIR/README.md"
+cp "$PROJECT_DIR/docs/"*.md "$DOCDIR/" 2>/dev/null || true
+echo "    Staged $(find "$DOCDIR" -name '*.md' | wc -l) doc file(s) into /usr/share/doc/osi"
+
 # genisoimage rejects files >4GB without -allow-limited-size.
 # Must be exported BEFORE lb config so lb_config writes it into config/common.
 # lb_binary_iso sources config/common via Read_conffiles, which would otherwise
@@ -175,7 +183,7 @@ lb config \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
     --linux-packages "linux-image" \
-    --bootappend-live "boot=live components username=osi hostname=osi" \
+    --bootappend-live "boot=live components username=osi hostname=osi quiet splash" \
     --apt-options "--yes --option Acquire::Retries=5" \
     --binary-images iso-hybrid \
     --iso-application "OSI Linux" \
@@ -217,11 +225,12 @@ if [ -f "$BUILD_DIR/config/binary" ]; then
     fi
 fi
 # Also scan for any other config files that might have them
-find "$BUILD_DIR/config" -type f 2>/dev/null | xargs -r grep -l 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
-    | xargs -r sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true
+find "$BUILD_DIR/config" -type f -print0 2>/dev/null \
+    | xargs -r -0 grep -lZ 'LB_UPDATES\|LB_VOLATILE' 2>/dev/null \
+    | xargs -r -0 sed -i 's/LB_UPDATES="true"/LB_UPDATES="false"/g; s/LB_VOLATILE="true"/LB_VOLATILE="false"/g' 2>/dev/null || true
 # Remove any pre-seeded sources.list files that reference -updates
-find "$BUILD_DIR/config" -type f 2>/dev/null \
-    | xargs -r sed -i '/-updates/d' 2>/dev/null || true
+find "$BUILD_DIR/config" -type f -print0 2>/dev/null \
+    | xargs -r -0 sed -i '/-updates/d' 2>/dev/null || true
 
 # Belt-and-suspenders: tell apt inside the chroot to treat missing repos as
 # warnings instead of fatal errors. live-build copies config/apt/apt.conf.d/*
@@ -246,10 +255,41 @@ if [ ! -d "$VARIANT_DIR" ]; then
 fi
 
 # Package list
-cp "$VARIANT_DIR/package-lists/"*.list.chroot "$BUILD_DIR/config/package-lists/" 2>/dev/null || true
+mkdir -p "$BUILD_DIR/config/package-lists"
+cp "$VARIANT_DIR/package-lists/"*.list.chroot "$BUILD_DIR/config/package-lists/"
+PKGLIST_COUNT=$(find "$BUILD_DIR/config/package-lists" -name '*.list.chroot' | wc -l)
+if [ "$PKGLIST_COUNT" -eq 0 ]; then
+    echo "ERROR: no package lists staged into config/package-lists/"
+    exit 1
+fi
+echo "    Installed $PKGLIST_COUNT package list(s)"
 
-# Hooks
-cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$BUILD_DIR/config/hooks/live/" 2>/dev/null || true
+# Hooks.
+# live-build moved where it looks for local hooks:
+#   older (e.g. Ubuntu's live-build 3.x):  config/hooks/*.chroot
+#   newer (Debian/Kali live-build 2021+):  config/hooks/live/*.chroot
+# lb_chroot_hooks only globs one of those. Copying into a directory this
+# live-build never scans — or into one that does not exist — means ZERO hooks
+# run, and the build still "succeeds": the ISO just silently ships without the
+# OSI user, theme, branding, SPICE fixes or first-boot service. So pick the
+# layout this live-build actually reads, and hard-fail if the copy is short.
+if grep -q 'config/hooks/live' /usr/lib/live/build/lb_chroot_hooks 2>/dev/null; then
+    HOOK_DEST="$BUILD_DIR/config/hooks/live"
+else
+    HOOK_DEST="$BUILD_DIR/config/hooks"
+fi
+mkdir -p "$HOOK_DEST"
+cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$HOOK_DEST/"
+chmod +x "$HOOK_DEST"/*.hook.chroot 2>/dev/null || true
+
+HOOK_SRC_COUNT=$(find "$PROJECT_DIR/kali-config/common/hooks/live" -name '*.hook.chroot' | wc -l)
+HOOK_DST_COUNT=$(find "$HOOK_DEST" -maxdepth 1 -name '*.hook.chroot' | wc -l)
+if [ "$HOOK_DST_COUNT" -ne "$HOOK_SRC_COUNT" ] || [ "$HOOK_DST_COUNT" -eq 0 ]; then
+    echo "ERROR: staged $HOOK_DST_COUNT of $HOOK_SRC_COUNT hooks into $HOOK_DEST"
+    echo "       The ISO would build without any OSI customisation. Aborting."
+    exit 1
+fi
+echo "    Installed $HOOK_DST_COUNT hooks into ${HOOK_DEST#"$BUILD_DIR"/}"
 
 # Squashfs excludes (omit build-only files from the live filesystem image)
 mkdir -p "$BUILD_DIR/config/binary_rootfs"
@@ -259,7 +299,15 @@ if [ -f "$PROJECT_DIR/kali-config/common/binary_rootfs/excludes" ]; then
 fi
 
 # Rootfs overlay (configs, skel, sysctl, etc.)
-cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/" 2>/dev/null || true
+mkdir -p "$BUILD_DIR/config/includes.chroot"
+cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/"
+INC_SRC_COUNT=$(find "$PROJECT_DIR/kali-config/common/includes.chroot" -type f | wc -l)
+INC_DST_COUNT=$(find "$BUILD_DIR/config/includes.chroot" -type f | wc -l)
+if [ "$INC_DST_COUNT" -lt "$INC_SRC_COUNT" ]; then
+    echo "ERROR: overlay short — staged $INC_DST_COUNT of $INC_SRC_COUNT files into config/includes.chroot/"
+    exit 1
+fi
+echo "    Installed rootfs overlay ($INC_DST_COUNT files)"
 
 # ── Build (staged) ────────────────────────────────────────────────────────────
 # live-build's lb_chroot_archives generates a sources.list entry for
@@ -371,6 +419,27 @@ APTEOF
 chroot "$BUILD_DIR/chroot" apt-get install -y \
     genisoimage syslinux syslinux-common mtools librsvg2-bin 2>&1 \
     | tee -a "$BUILD_DIR/build.log" || true
+
+step "Restoring real apt-get before the squashfs is built"
+# This MUST happen before `lb binary`: lb_binary_rootfs squashes the chroot as
+# it stands, so a wrapper left in place here ships inside filesystem.squashfs
+# and becomes the apt-get of the installed system — one that rewrites
+# sources.list on every call and, while the sentinel exists, makes
+# `apt-get update` a silent no-op forever. Restoring afterwards (as before) was
+# far too late. The binary stage does not need the wrapper: LB_UPDATES and
+# LB_VOLATILE are already false, the -updates lines are long gone from
+# sources.list, and 99-osi-timeout keeps any stray apt call from hanging.
+if [ -f "$APT_REAL" ]; then
+    mv -f "$APT_REAL" "$APT_WRAPPER"
+    echo "    Restored original apt-get"
+fi
+rm -f "$BUILD_DIR/chroot/build_chroot_done"
+
+if ! head -c 4 "$APT_WRAPPER" | grep -q $'\x7fELF'; then
+    echo "ERROR: $APT_WRAPPER is not the real apt-get — refusing to build an image"
+    echo "       that would ship a build wrapper as its package manager."
+    exit 1
+fi
 
 step "Stage 3/3: Binary (assembling ISO)"
 
@@ -500,18 +569,29 @@ fi
 
 lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
 
-step "Restoring real apt-get in chroot"
+# apt-get was already restored before the binary stage (see above). This is a
+# safety net for an aborted run that left the wrapper in place.
 if [ -f "$APT_REAL" ]; then
-    mv "$APT_REAL" "$APT_WRAPPER"
-    echo "    Restored original apt-get"
+    mv -f "$APT_REAL" "$APT_WRAPPER"
+    echo "    Restored original apt-get (late safety net)"
 fi
 rm -f "$BUILD_DIR/chroot/build_chroot_done"
 
 # ── Output ────────────────────────────────────────────────────────────────────
 # Find the built ISO — name depends on live-build version and --image-name support
-ISO_FILE=$(ls "$BUILD_DIR"/osi-linux-*.iso 2>/dev/null | head -1)
-[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/live-image-*.iso 2>/dev/null | head -1)
-[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/*.iso 2>/dev/null | head -1)
+# `X=$(ls glob | head -1)` aborts the script under `set -o pipefail` when the
+# glob matches nothing: ls exits 2 and pipefail propagates it through the
+# assignment. That killed build.sh silently right after a successful build —
+# before validation, before --output, before the checksum. Older live-build
+# also names the image binary.hybrid.iso, which the previous patterns missed
+# entirely. Use find, which exits 0 on no match.
+find_iso() {
+    find "$BUILD_DIR" -maxdepth 1 -type f -name "$1" 2>/dev/null | sort | head -1
+}
+ISO_FILE=$(find_iso 'osi-linux-*.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso 'live-image-*.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso 'binary.hybrid.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso '*.iso')
 if [ -z "$ISO_FILE" ]; then
     echo "ERROR: Build failed — no ISO found. Check build.log"
     exit 1
@@ -586,8 +666,10 @@ echo "  [ OK ] sha256 written to $(basename "$ISO_FILE").sha256"
 
 if [ "$ISO_OK" -eq 0 ]; then
     echo ""
-    echo "WARNING: One or more validation checks failed. The ISO is at $ISO_FILE"
-    echo "         but may not boot. Inspect build.log and try --clean."
+    echo "ERROR: One or more validation checks failed. The ISO is at $ISO_FILE"
+    echo "       but is missing a kernel, a volume descriptor or expected size."
+    echo "       Inspect build.log and try --clean. Not reporting success."
+    exit 1
 fi
 
 echo ""

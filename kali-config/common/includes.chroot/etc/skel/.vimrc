@@ -1,4 +1,4 @@
-" OSI Linux vimrc — minimal, plugin-free, cyberpunk colors
+" OSI Linux vimrc — minimal, plugin-free, OSI-Noir (strict B&W)
 
 set nocompatible
 syntax on
@@ -46,28 +46,38 @@ set encoding=utf-8
 set hidden ttyfast
 set updatetime=250
 
-" Cyberpunk color overrides
+" OSI-Noir color overrides — strict B&W.
+" Uses the 256-colour grayscale ramp (232-255) rather than ANSI 1-6, so the
+" scheme stays monochrome even outside xfce4-terminal (TTY, ssh, tmux) where
+" the OSI-Noir 16-colour palette remap is not in effect. Syntax is
+" differentiated by brightness and weight instead of hue.
 set background=dark
-hi Normal       ctermbg=NONE
+hi Normal       ctermbg=NONE ctermfg=250
 hi CursorLine   ctermbg=235 cterm=NONE
-hi CursorLineNr ctermfg=6 cterm=bold
-hi LineNr       ctermfg=239
-hi Visual       ctermbg=236
-hi Search       ctermfg=0 ctermbg=6
-hi IncSearch    ctermfg=0 ctermbg=5
-hi OsiAccent    ctermbg=6 ctermfg=0 cterm=bold
-hi OsiMid       ctermbg=235 ctermfg=7
-hi StatusLine   cterm=NONE ctermbg=235 ctermfg=7
-hi StatusLineNC cterm=NONE ctermbg=234 ctermfg=239
-hi Pmenu        ctermbg=235 ctermfg=7
-hi PmenuSel     ctermbg=6 ctermfg=0
-hi VertSplit    ctermfg=235 ctermbg=NONE
-hi Comment      ctermfg=239
-hi String       ctermfg=2
-hi Constant     ctermfg=3
-hi Function     ctermfg=4
-hi Keyword      ctermfg=5
-hi Type         ctermfg=6
+hi CursorLineNr ctermfg=255 cterm=bold
+hi LineNr       ctermfg=240
+hi Visual       ctermbg=238
+hi Search       ctermfg=16  ctermbg=250
+hi IncSearch    ctermfg=16  ctermbg=255 cterm=bold
+hi OsiAccent    ctermbg=255 ctermfg=16  cterm=bold
+hi OsiMid       ctermbg=236 ctermfg=250
+hi StatusLine   cterm=NONE ctermbg=236 ctermfg=250
+hi StatusLineNC cterm=NONE ctermbg=234 ctermfg=240
+hi Pmenu        ctermbg=236 ctermfg=250
+hi PmenuSel     ctermbg=255 ctermfg=16  cterm=bold
+hi VertSplit    ctermfg=236 ctermbg=NONE
+hi Comment      ctermfg=242
+hi String       ctermfg=252
+hi Constant     ctermfg=247
+hi Identifier   ctermfg=250
+hi Function     ctermfg=255 cterm=bold
+hi Keyword      ctermfg=255 cterm=bold
+hi Statement    ctermfg=255 cterm=bold
+hi Type         ctermfg=252 cterm=bold
+hi PreProc      ctermfg=247
+hi Special      ctermfg=247
+hi MatchParen   ctermbg=240 ctermfg=255 cterm=bold
+hi Todo         ctermbg=255 ctermfg=16  cterm=bold
 hi SignColumn   ctermbg=NONE
 
 " Leader key

@@ -13,6 +13,10 @@
 #   VM_CORES=4  VM_THREADS=2  VM_RAM=8G  DISK_IMAGE=~/VM/osi.qcow2
 #   NO_GL=1     (disable GL, use manual SPICE connection)
 # ──────────────────────────────────────────────────────────────────────────────
+# QEMU device/drive arguments are single strings whose fields are comma
+# separated (e.g. "file=$DISK,if=none,format=qcow2"). ShellCheck reads those
+# commas as mistaken array element separators; they are intentional here.
+# shellcheck disable=SC2054
 set -euo pipefail
 
 DISK="${DISK_IMAGE:-$HOME/VM/osi-linux.qcow2}"
@@ -55,8 +59,11 @@ find_ovmf_vars() {
     done
 }
 
-OVMF_CODE=$(find_ovmf_code)
-OVMF_VARS_TEMPLATE=$(find_ovmf_vars)
+# `|| true`: both helpers end on a failed test when nothing matches, so under
+# `set -e` the bare assignment killed the script before the friendly
+# "OVMF firmware not found" message below could ever print.
+OVMF_CODE=$(find_ovmf_code || true)
+OVMF_VARS_TEMPLATE=$(find_ovmf_vars || true)
 
 if [ -z "$OVMF_CODE" ]; then
     echo "ERROR: OVMF firmware not found. Install it first:"
@@ -183,7 +190,10 @@ fi
 # Set GL=1 only if you have AMD/Intel GPU with Mesa drivers.
 GL="${GL:-0}"
 
-QEMU_ARGS+=( -device virtio-gpu-pci )
+# -vga none is required: without it QEMU still adds its default std VGA, so the
+# guest boots with TWO display adapters. X can then pick the wrong primary and
+# SPICE auto-resize silently targets the output nobody is looking at.
+QEMU_ARGS+=( -vga none -device virtio-gpu-pci )
 
 if [ "$NO_GL" = "1" ]; then
     # Headless mode: daemonize, connect manually with spicy or remote-viewer

@@ -75,11 +75,14 @@ ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --timeout=5 --any
 EOF
 systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
 
-# ── Disable Plymouth (broken/ugly in VM) ─────────────────────────────────────
-systemctl mask plymouth-start.service 2>/dev/null || true
-systemctl mask plymouth-read-write.service 2>/dev/null || true
-systemctl mask plymouth-quit.service 2>/dev/null || true
-systemctl mask plymouth-quit-wait.service 2>/dev/null || true
+# ── Plymouth ─────────────────────────────────────────────────────────────────
+# Deliberately NOT masked. This predates the OSI-Noir splash: masking
+# plymouth-start here meant the osi-noir theme that 0015 selects, the three
+# plymouth packages in the package list and the shipped theme assets were all
+# dead weight, while the README still advertised a boot splash.
+# 0015-qemu-guest-fixes owns Plymouth configuration; the splash is requested by
+# the 'splash' kernel argument in build.sh's --bootappend-live.
+# To boot without it, drop 'splash' from the kernel command line.
 
 # ── Enable services ───────────────────────────────────────────────────────────
 systemctl enable ssh 2>/dev/null || true

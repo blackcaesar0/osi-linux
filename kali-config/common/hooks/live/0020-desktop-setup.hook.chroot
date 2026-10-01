@@ -9,6 +9,9 @@ set -euo pipefail
 echo "[OSI] Configuring XFCE desktop environment..."
 
 # ── Bash prompt in /etc/skel/.bashrc ──────────────────────────────────────────
+# Guarded so an incremental rebuild against a cached chroot does not append the
+# prompt and PATH exports a second time.
+if ! grep -q '_osi_ip' /etc/skel/.bashrc 2>/dev/null; then
 cat >> /etc/skel/.bashrc << 'BASHEOF'
 
 # OSI prompt — shows IP of primary outbound interface
@@ -26,6 +29,7 @@ fi
 export GOPATH="$HOME/go"
 export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
 BASHEOF
+fi
 
 # ── GTK dark theme with proper font rendering ────────────────────────────────
 mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
@@ -33,7 +37,7 @@ mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
 cat > /etc/skel/.config/gtk-3.0/settings.ini << 'EOF'
 [Settings]
 gtk-icon-theme-name=Papirus-Dark
-gtk-theme-name=Arc-Dark
+gtk-theme-name=OSI-Noir
 gtk-font-name=Hack 10
 gtk-cursor-theme-name=Adwaita
 gtk-cursor-theme-size=24
@@ -44,7 +48,7 @@ gtk-enable-input-feedback-sounds=0
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle=hintslight
-gtk-xft-rgba=rgb
+gtk-xft-rgba=none
 gtk-application-prefer-dark-theme=1
 EOF
 cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
@@ -52,24 +56,31 @@ cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
 # GTK2 settings (for older apps like wireshark)
 cat > /etc/skel/.gtkrc-2.0 << 'EOF'
 gtk-icon-theme-name="Papirus-Dark"
-gtk-theme-name="Arc-Dark"
+gtk-theme-name="OSI-Noir"
 gtk-font-name="Hack 10"
 gtk-cursor-theme-name="Adwaita"
 gtk-cursor-theme-size=24
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle="hintslight"
-gtk-xft-rgba="rgb"
+gtk-xft-rgba="none"
 EOF
 
 # ── Xresources for DPI and cursor ────────────────────────────────────────────
+# Antialiasing is GRAYSCALE (rgba=none), not subpixel/RGB, on purpose:
+#   1. OSI-Noir is strict black-and-white. Subpixel AA renders coloured
+#      (orange/blue) fringes on every glyph edge, which is literal chroma.
+#   2. This image is VM-first. Subpixel order is a property of a physical LCD;
+#      over SPICE the host rescales and recompresses the framebuffer, so
+#      subpixel hinting produces artefacts rather than sharpness.
+# Hinting stays on, so text is still crisp.
 cat > /etc/skel/.Xresources << 'EOF'
 Xft.dpi: 96
 Xft.antialias: true
 Xft.hinting: true
 Xft.hintstyle: hintslight
-Xft.rgba: rgb
-Xft.lcdfilter: lcddefault
+Xft.rgba: none
+Xft.lcdfilter: none
 Xcursor.theme: Adwaita
 Xcursor.size: 24
 EOF
@@ -84,8 +95,8 @@ cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
     <edit name="antialias" mode="assign"><bool>true</bool></edit>
     <edit name="hinting" mode="assign"><bool>true</bool></edit>
     <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
-    <edit name="rgba" mode="assign"><const>rgb</const></edit>
-    <edit name="lcdfilter" mode="assign"><const>lcddefault</const></edit>
+    <edit name="rgba" mode="assign"><const>none</const></edit>
+    <edit name="lcdfilter" mode="assign"><const>none</const></edit>
   </match>
   <alias>
     <family>monospace</family>
@@ -102,44 +113,45 @@ cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
 </fontconfig>
 EOF
 
-# ── OSI accent overlay (works with Arc-Dark; keeps distro identity off Kali chrome) ─
+# ── OSI-Noir panel/menu overlay (strict B&W; layers on the OSI-Noir GTK theme) ─
 mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
 cat > /etc/skel/.config/gtk-3.0/gtk.css << 'EOF'
-/* OSI Linux — GTK 3 accent on Arc-Dark */
+/* OSI Linux — panel + Whisker Menu accents. Strict B&W, matches OSI-Noir. */
 #xfce4-panel.background,
 #xfce4-panel {
   background-image: none;
-  background-color: #0b0e14;
-  color: #c8d0dc;
+  background-color: #0a0a0a;
+  color: #c8c8c8;
   border: none;
 }
 #xfce4-panel button:hover {
-  background-color: rgba(0, 201, 167, 0.12);
+  background-color: #1f1f1f;
 }
 #xfce4-panel .tasklist button:checked {
-  background-color: rgba(0, 201, 167, 0.22);
+  background-color: #2a2a2a;
+  color: #ffffff;
 }
-/* Whisker Menu — dark shell + teal selection */
+/* Whisker Menu — black shell, inverted (white-on-black) selection */
 .whiskermenu-window,
 #whiskermenu-window {
-  background-color: #0e141a;
-  color: #c8d0dc;
+  background-color: #0a0a0a;
+  color: #c8c8c8;
 }
 .whiskermenu-window treeview.view:selected,
 .whiskermenu-window treeview.view:selected:focus,
 .whiskermenu-window iconview.view:selected {
-  background-color: rgba(0, 201, 167, 0.45);
-  color: #0b0e14;
+  background-color: #ffffff;
+  color: #000000;
 }
 .whiskermenu-window entry {
-  background-color: #131920;
-  color: #c8d0dc;
-  border-color: rgba(0, 201, 167, 0.35);
+  background-color: #141414;
+  color: #ffffff;
+  border-color: #3a3a3a;
 }
 .whiskermenu-window .sidebar-item:selected,
 .whiskermenu-window list row:selected {
-  background-color: rgba(0, 201, 167, 0.25);
-  color: #f0f4f8;
+  background-color: #ffffff;
+  color: #000000;
 }
 EOF
 cp /etc/skel/.config/gtk-3.0/gtk.css /etc/skel/.config/gtk-4.0/gtk.css
@@ -154,26 +166,6 @@ mkdir -p /etc/skel/.local/bin
 for dir in recon exploitation post-exploitation web network forensics custom wordlists; do
     printf '# %s\n\nDrop tools, scripts, and notes here.\n' "$dir" > "/etc/skel/tools/$dir/README.md"
 done
-
-# ── Configure the live user (osi) ─────────────────────────────────────────────
-if ! id osi &>/dev/null; then
-    useradd -m -G sudo,audio,video,cdrom,plugdev,netdev,bluetooth,wireshark \
-        -s /bin/bash osi 2>/dev/null || true
-fi
-
-# Passwordless sudo for osi
-echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
-chmod 0440 /etc/sudoers.d/99-osi-nopasswd
-
-# Set default password (osi:osi — user must change after first sudo/login).
-# Both passwords are immediately expired via `chage -d 0`, so PAM forces a
-# password change before anything privileged runs (sudo, su, ssh login,
-# console login). Auto-login can still get to the desktop, but any sudo or
-# su attempt will block until the password is rotated.
-echo "osi:osi" | chpasswd 2>/dev/null || true
-echo "root:toor" | chpasswd 2>/dev/null || true
-chage -d 0 osi  2>/dev/null || true
-chage -d 0 root 2>/dev/null || true
 
 # ── LightDM — auto-login with XFCE in X11 mode ──────────────────────────────
 # Explicitly force X11 session type. spice-vdagent is X11-only — if LightDM
@@ -201,30 +193,103 @@ if [ ! -f /usr/share/pixmaps/osi-menu.png ] && [ -f /usr/share/backgrounds/osi/o
     cp -f /usr/share/backgrounds/osi/osi.png /usr/share/pixmaps/osi-menu.png
 fi
 
-# LightDM greeter theme (Arc-Dark + OSI wallpaper)
-cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
+# ── LightDM greeter ──────────────────────────────────────────────────────────
+# The canonical greeter config is shipped via includes.chroot
+# (etc/lightdm/lightdm-gtk-greeter.conf) and uses the OSI-Noir theme. This hook
+# runs AFTER the includes overlay is applied, so writing the file here
+# unconditionally would silently clobber the shipped B&W config with a
+# different theme. Only write a fallback if the shipped file is absent.
+if [ ! -s /etc/lightdm/lightdm-gtk-greeter.conf ]; then
+    echo "[OSI] no shipped greeter config found — writing OSI-Noir fallback"
+    cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
 [greeter]
-theme-name=Arc-Dark
+theme-name=OSI-Noir
 icon-theme-name=Papirus-Dark
-font-name=Hack 10
+font-name=Hack 11
 background=/usr/share/backgrounds/osi/osi.png
 user-background=false
+hide-user-image=true
 position=50%,center 50%,center
-default-user-image=/usr/share/pixmaps/osi-menu.png
-indicators=~host;~spacer;~clock;~spacer;~session;~power
-clock-format=%H:%M  |  %Y-%m-%d
+indicators=~spacer;~clock;~spacer;~session;~power
+clock-format=%Y-%m-%d  %H:%M
 active-monitor=#cursor
 EOF
+fi
 
-# ── XFCE default session ─────────────────────────────────────────────────────
-mkdir -p /etc/skel/.config/xfce4
-cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
+# ── Xresources at session start ──────────────────────────────────────────────
+# Deliberately NOT shipping ~/.config/xfce4/xinitrc.
+#
+# startxfce4 execs "$BASEDIR/xinitrc" (BASEDIR = ~/.config/xfce4) in preference
+# to /etc/xdg/xfce4/xinitrc, so a file there does not extend the system startup,
+# it REPLACES it. The system file does real work we silently lost: most
+# importantly it exports XDG_MENU_PREFIX=xfce-, without which
+# xfce-applications.menu is never selected and the Applications / Whisker menu
+# comes up empty.
+#
+# The system xinitrc sources /etc/xdg/xfce4/xinitrc.d/*.sh, which is the
+# supported hook point, so put our one line there and let the rest run.
+rm -f /etc/skel/.config/xfce4/xinitrc
+mkdir -p /etc/xdg/xfce4/xinitrc.d
+cat > /etc/xdg/xfce4/xinitrc.d/50-osi-xresources.sh << 'XRES'
 #!/bin/sh
-# SPICE: use /etc/xdg/autostart/spice-vdagent.desktop only (see 0015 hook).
-# Starting spice-vdagent here *and* via autostart creates two agents and breaks clipboard.
-[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
-exec startxfce4
-XINITRC
-chmod +x /etc/skel/.config/xfce4/xinitrc
+# OSI Linux — merge the user's X resources into the session.
+# SPICE: spice-vdagent is started by /etc/xdg/autostart/spice-vdagent.desktop
+# only (see the 0015 hook). Starting it here as well creates two agents and
+# breaks the clipboard.
+[ -f "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
+XRES
+chmod +x /etc/xdg/xfce4/xinitrc.d/50-osi-xresources.sh
+
+# ── Configure the live user (osi) ─────────────────────────────────────────────
+# This runs LAST, after every write to /etc/skel above.
+# useradd copies /etc/skel once, at creation time. Creating the account earlier
+# meant each later skel write never reached the live user: the spice-vdagent
+# user-unit mask below is the costly one — without it the osi session runs two
+# vdagent instances, vdagentd drops one, and the clipboard this image exists to
+# make work stops working.
+# Create the account FIRST with no supplementary groups, then add each group
+# individually.
+#
+# `useradd -G a,b,c` is all-or-nothing: if a single group in the list does not
+# exist, useradd aborts with exit 6 and creates NO user at all. The 'wireshark'
+# group is exactly such a case — wireshark-common only creates it when its
+# debconf flag enables non-root capture, which is off by default in a
+# non-interactive build. Combined with the old `|| true`, that silently left the
+# image with no 'osi' user while LightDM's autologin-user still pointed at it,
+# so the ISO booted to a greeter with no usable account.
+if ! id osi >/dev/null 2>&1; then
+    useradd -m -s /bin/bash osi
+fi
+
+for _grp in sudo audio video cdrom plugdev netdev bluetooth wireshark; do
+    if getent group "$_grp" >/dev/null 2>&1; then
+        usermod -aG "$_grp" osi
+    else
+        echo "[OSI] group '$_grp' absent — skipping (added later if a hook creates it)"
+    fi
+done
+
+# Everything below (passwords, autologin, ownership) assumes this account
+# exists. If it does not, fail the build loudly rather than shipping a
+# system nobody can log into.
+if ! id osi >/dev/null 2>&1; then
+    echo "[OSI] ERROR: failed to create the 'osi' live user" >&2
+    exit 1
+fi
+echo "[OSI] live user: $(id osi)"
+
+# Passwordless sudo for osi
+echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
+chmod 0440 /etc/sudoers.d/99-osi-nopasswd
+
+# Set default password (osi:osi — user must change after first sudo/login).
+# Both passwords are immediately expired via `chage -d 0`, so PAM forces a
+# password change before anything privileged runs (sudo, su, ssh login,
+# console login). Auto-login can still get to the desktop, but any sudo or
+# su attempt will block until the password is rotated.
+echo "osi:osi" | chpasswd 2>/dev/null || true
+echo "root:toor" | chpasswd 2>/dev/null || true
+chage -d 0 osi  2>/dev/null || true
+chage -d 0 root 2>/dev/null || true
 
 echo "[OSI] Desktop configuration complete."
