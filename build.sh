@@ -183,7 +183,7 @@ lb config \
     --architectures "$ARCH" \
     --linux-flavours "$ARCH" \
     --linux-packages "linux-image" \
-    --bootappend-live "boot=live components username=osi hostname=osi" \
+    --bootappend-live "boot=live components username=osi hostname=osi quiet splash" \
     --apt-options "--yes --option Acquire::Retries=5" \
     --binary-images iso-hybrid \
     --iso-application "OSI Linux" \
@@ -420,6 +420,27 @@ chroot "$BUILD_DIR/chroot" apt-get install -y \
     genisoimage syslinux syslinux-common mtools librsvg2-bin 2>&1 \
     | tee -a "$BUILD_DIR/build.log" || true
 
+step "Restoring real apt-get before the squashfs is built"
+# This MUST happen before `lb binary`: lb_binary_rootfs squashes the chroot as
+# it stands, so a wrapper left in place here ships inside filesystem.squashfs
+# and becomes the apt-get of the installed system — one that rewrites
+# sources.list on every call and, while the sentinel exists, makes
+# `apt-get update` a silent no-op forever. Restoring afterwards (as before) was
+# far too late. The binary stage does not need the wrapper: LB_UPDATES and
+# LB_VOLATILE are already false, the -updates lines are long gone from
+# sources.list, and 99-osi-timeout keeps any stray apt call from hanging.
+if [ -f "$APT_REAL" ]; then
+    mv -f "$APT_REAL" "$APT_WRAPPER"
+    echo "    Restored original apt-get"
+fi
+rm -f "$BUILD_DIR/chroot/build_chroot_done"
+
+if ! head -c 4 "$APT_WRAPPER" | grep -q $'\x7fELF'; then
+    echo "ERROR: $APT_WRAPPER is not the real apt-get — refusing to build an image"
+    echo "       that would ship a build wrapper as its package manager."
+    exit 1
+fi
+
 step "Stage 3/3: Binary (assembling ISO)"
 
 # Suppress needrestart and debconf interactive prompts inside the binary chroot.
@@ -548,18 +569,29 @@ fi
 
 lb binary 2>&1 | tee -a "$BUILD_DIR/build.log"
 
-step "Restoring real apt-get in chroot"
+# apt-get was already restored before the binary stage (see above). This is a
+# safety net for an aborted run that left the wrapper in place.
 if [ -f "$APT_REAL" ]; then
-    mv "$APT_REAL" "$APT_WRAPPER"
-    echo "    Restored original apt-get"
+    mv -f "$APT_REAL" "$APT_WRAPPER"
+    echo "    Restored original apt-get (late safety net)"
 fi
 rm -f "$BUILD_DIR/chroot/build_chroot_done"
 
 # ── Output ────────────────────────────────────────────────────────────────────
 # Find the built ISO — name depends on live-build version and --image-name support
-ISO_FILE=$(ls "$BUILD_DIR"/osi-linux-*.iso 2>/dev/null | head -1)
-[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/live-image-*.iso 2>/dev/null | head -1)
-[ -z "$ISO_FILE" ] && ISO_FILE=$(ls "$BUILD_DIR"/*.iso 2>/dev/null | head -1)
+# `X=$(ls glob | head -1)` aborts the script under `set -o pipefail` when the
+# glob matches nothing: ls exits 2 and pipefail propagates it through the
+# assignment. That killed build.sh silently right after a successful build —
+# before validation, before --output, before the checksum. Older live-build
+# also names the image binary.hybrid.iso, which the previous patterns missed
+# entirely. Use find, which exits 0 on no match.
+find_iso() {
+    find "$BUILD_DIR" -maxdepth 1 -type f -name "$1" 2>/dev/null | sort | head -1
+}
+ISO_FILE=$(find_iso 'osi-linux-*.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso 'live-image-*.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso 'binary.hybrid.iso')
+[ -n "$ISO_FILE" ] || ISO_FILE=$(find_iso '*.iso')
 if [ -z "$ISO_FILE" ]; then
     echo "ERROR: Build failed — no ISO found. Check build.log"
     exit 1
@@ -634,8 +666,10 @@ echo "  [ OK ] sha256 written to $(basename "$ISO_FILE").sha256"
 
 if [ "$ISO_OK" -eq 0 ]; then
     echo ""
-    echo "WARNING: One or more validation checks failed. The ISO is at $ISO_FILE"
-    echo "         but may not boot. Inspect build.log and try --clean."
+    echo "ERROR: One or more validation checks failed. The ISO is at $ISO_FILE"
+    echo "       but is missing a kernel, a volume descriptor or expected size."
+    echo "       Inspect build.log and try --clean. Not reporting success."
+    exit 1
 fi
 
 echo ""

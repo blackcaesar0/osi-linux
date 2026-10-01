@@ -225,6 +225,8 @@ sysstat
 p7zip-full
 unzip
 zip
+# unrar: the shipped extract() helper invokes it for .rar archives
+unrar
 rsync
 ntpsec-ntpdate
 ca-certificates

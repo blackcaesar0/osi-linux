@@ -9,6 +9,9 @@ set -euo pipefail
 echo "[OSI] Configuring XFCE desktop environment..."
 
 # ── Bash prompt in /etc/skel/.bashrc ──────────────────────────────────────────
+# Guarded so an incremental rebuild against a cached chroot does not append the
+# prompt and PATH exports a second time.
+if ! grep -q '_osi_ip' /etc/skel/.bashrc 2>/dev/null; then
 cat >> /etc/skel/.bashrc << 'BASHEOF'
 
 # OSI prompt — shows IP of primary outbound interface
@@ -26,6 +29,7 @@ fi
 export GOPATH="$HOME/go"
 export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"
 BASHEOF
+fi
 
 # ── GTK dark theme with proper font rendering ────────────────────────────────
 mkdir -p /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0
@@ -265,7 +269,13 @@ cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
 # SPICE: use /etc/xdg/autostart/spice-vdagent.desktop only (see 0015 hook).
 # Starting spice-vdagent here *and* via autostart creates two agents and breaks clipboard.
 [ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
-exec startxfce4
+
+# exec xfce4-session, NOT startxfce4.
+# startxfce4 execs "$BASEDIR/xinitrc" where BASEDIR is ~/.config/xfce4 — this
+# very file. Calling startxfce4 from here is therefore an infinite loop, and
+# since LightDM's xfce session also runs startxfce4, autologin never reaches a
+# desktop. The system file /etc/xdg/xfce4/xinitrc ends the same way we do now.
+exec xfce4-session
 XINITRC
 chmod +x /etc/skel/.config/xfce4/xinitrc
 

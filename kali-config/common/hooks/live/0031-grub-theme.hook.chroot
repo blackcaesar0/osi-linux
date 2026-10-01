@@ -101,7 +101,11 @@ if command -v convert >/dev/null 2>&1; then
 fi
 
 mkdir -p /etc/default/grub.d
-cat > /etc/default/grub.d/99-osi-theme.cfg << 'EOF'
+# Named to sort AFTER kali-themes.cfg. grub-mkconfig sources this directory in
+# glob order and last write wins; '9' sorts before 'k', so the old
+# 99-osi-theme.cfg was silently overridden by Kali's own theme config.
+rm -f /etc/default/grub.d/99-osi-theme.cfg
+cat > /etc/default/grub.d/zz-osi-theme.cfg << 'EOF'
 # OSI Linux — GRUB branding (sourced by grub-mkconfig)
 GRUB_DISTRIBUTOR="OSI Linux"
 GRUB_THEME=/boot/grub/themes/OSI-Noir/theme.txt

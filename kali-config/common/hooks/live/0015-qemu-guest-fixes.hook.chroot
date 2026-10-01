@@ -88,7 +88,11 @@ _session_uid() {
 }
 
 apply_resize() {
-    local uid="$1" disp="$2" xauth="$3" user
+    # xauth is optional: Xorg's environ often has no XAUTHORITY, in which case
+    # find_x_session emits only two fields. Under `set -u` a bare "$3" then
+    # aborted the whole script with "unbound variable" on the very first
+    # attempt, so SPICE auto-resize never ran at all.
+    local uid="$1" disp="$2" xauth="${3:-}" user
     user="$(id -nu "$uid" 2>/dev/null || true)"
     [ -n "$user" ] || { echo "no user for uid=$uid"; return 1; }
 
@@ -125,7 +129,8 @@ apply_resize() {
 attempt() {
     local s
     s="$(find_x_session)" || return 1
-    # shellcheck disable=SC2086 # split intentional
+    # Intentional word splitting: find_x_session prints "uid disp [xauth]".
+    # shellcheck disable=SC2086
     apply_resize $s
 }
 
@@ -280,7 +285,10 @@ EOF
 # NM owns resolv.conf via dns=auto. systemd-resolved stays unmasked but the
 # actual stub is bypassed via dns=auto so VPNs keep working.
 systemctl unmask systemd-resolved.service 2>/dev/null || true
-rm -f /etc/resolv.conf
+# Do NOT remove /etc/resolv.conf here. live-build provides it for the chroot
+# stage, and deleting it mid-hook leaves every later build step (and hook)
+# without DNS. NetworkManager owns resolv.conf at runtime via dns=auto below
+# and rewrites it on first connection, so there is nothing to clean up.
 
 mkdir -p /etc/NetworkManager/conf.d
 cat > /etc/NetworkManager/conf.d/10-osi.conf << 'EOF'
@@ -296,13 +304,17 @@ managed=true
 wifi.scan-rand-mac-address=yes
 EOF
 
-# ── Docker: overlay2, sane log limits, DNS *not* hardcoded ───────────────────
+# ── Docker: sane log limits, DNS *not* hardcoded, storage driver autodetected ─
+# storage-driver is deliberately NOT pinned to overlay2: on the live ISO the
+# root filesystem is already an overlay, and overlay2 on top of overlay refuses
+# to start, so dockerd would fail on exactly the live image this project ships.
+# Letting Docker pick gives overlay2 on an installed disk and a working
+# fallback on the live system.
 # Letting Docker inherit the host resolver means VPN/captive-portal/enterprise
 # DNS keeps working inside containers too.
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json << 'EOF'
 {
-    "storage-driver": "overlay2",
     "log-driver": "json-file",
     "log-opts": { "max-size": "10m", "max-file": "3" }
 }
