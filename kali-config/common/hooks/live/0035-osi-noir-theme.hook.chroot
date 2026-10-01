@@ -43,10 +43,34 @@ if [ -n "$SRC" ]; then
     fi
 
     if command -v convert >/dev/null 2>&1; then
-        log "desaturating xfwm4 pixmaps to grayscale"
+        # Desaturating alone is not enough. The seed themes (Default, Daloa) are
+        # LIGHT, so a grayscale copy is a LIGHT GREY theme: title bars rendered
+        # at #c5c5c5 while themerc asked for #0a0a0a, and because xfwm4 prefers
+        # pixmaps over themerc colours when both exist, the themerc was ignored.
+        # With active_text_color=#ffffff that left white text on light grey —
+        # near unreadable, and nothing like the intended black.
+        #
+        # Treat the two kinds of pixmap differently:
+        #   frame pieces (title/top/bottom/left/right) -> flat noir fill, so the
+        #       window chrome matches themerc exactly
+        #   buttons -> grayscale then invert, turning the dark glyphs of a light
+        #       theme into light glyphs that read against the dark bar
+        log "recolouring xfwm4 pixmaps to the OSI-Noir palette"
         for f in "$XFWM_DST"/*.xpm "$XFWM_DST"/*.png; do
             [ -f "$f" ] || continue
-            convert "$f" -colorspace Gray "$f" 2>/dev/null || true
+            base="$(basename "$f")"
+            case "$base" in
+                title-*|top-*|bottom-*|left-*|right-*)
+                    case "$base" in
+                        *-inactive.*) fill="#000000" ;;
+                        *)            fill="#0a0a0a" ;;
+                    esac
+                    convert "$f" -alpha off -fill "$fill" -colorize 100% "$f" 2>/dev/null || true
+                    ;;
+                *)
+                    convert "$f" -colorspace Gray -channel RGB -negate "$f" 2>/dev/null || true
+                    ;;
+            esac
         done
     fi
 
