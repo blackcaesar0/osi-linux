@@ -142,6 +142,9 @@ fix-clipboard    # restart spice-vdagent
 | `clip` | Pipe stdin to the clipboard, or `clip -o` to read it back |
 | `osi-update` | Update and upgrade APT packages; `--all` also upgrades pipx tools |
 
+Wireshark is configured for non-root capture: the `wireshark` group is created
+at build time and `osi` is a member, so `dumpcap` runs without `sudo`.
+
 The shipped documentation is also installed inside the image at
 `/usr/share/doc/osi/`.
 
@@ -218,6 +221,12 @@ make              # list every available target
 | `make lint` | Every shell script parses and is shellcheck-clean at warning severity |
 | `make check-theme` | Every colour in a theme file is grayscale, and `config/` matches its `/etc/skel` mirror |
 | `make check-repo` | Build hooks are executable and the package list has no duplicates |
+| `make check-packages` | Every package still exists in kali-rolling (needs network; `make check-all` includes it) |
+
+Kali rolling removes and renames packages continuously, and a stale name fails
+`lb chroot` partway through a 30-90 minute build. The package gate resolves the
+whole list against the live index up front, so that failure costs seconds
+instead of an hour.
 
 The theme gate is what keeps OSI-Noir honest: "strict black-and-white" is
 checked mechanically rather than trusted, so an accent colour cannot creep back

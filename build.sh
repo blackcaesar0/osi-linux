@@ -255,10 +255,41 @@ if [ ! -d "$VARIANT_DIR" ]; then
 fi
 
 # Package list
-cp "$VARIANT_DIR/package-lists/"*.list.chroot "$BUILD_DIR/config/package-lists/" 2>/dev/null || true
+mkdir -p "$BUILD_DIR/config/package-lists"
+cp "$VARIANT_DIR/package-lists/"*.list.chroot "$BUILD_DIR/config/package-lists/"
+PKGLIST_COUNT=$(find "$BUILD_DIR/config/package-lists" -name '*.list.chroot' | wc -l)
+if [ "$PKGLIST_COUNT" -eq 0 ]; then
+    echo "ERROR: no package lists staged into config/package-lists/"
+    exit 1
+fi
+echo "    Installed $PKGLIST_COUNT package list(s)"
 
-# Hooks
-cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$BUILD_DIR/config/hooks/live/" 2>/dev/null || true
+# Hooks.
+# live-build moved where it looks for local hooks:
+#   older (e.g. Ubuntu's live-build 3.x):  config/hooks/*.chroot
+#   newer (Debian/Kali live-build 2021+):  config/hooks/live/*.chroot
+# lb_chroot_hooks only globs one of those. Copying into a directory this
+# live-build never scans — or into one that does not exist — means ZERO hooks
+# run, and the build still "succeeds": the ISO just silently ships without the
+# OSI user, theme, branding, SPICE fixes or first-boot service. So pick the
+# layout this live-build actually reads, and hard-fail if the copy is short.
+if grep -q 'config/hooks/live' /usr/lib/live/build/lb_chroot_hooks 2>/dev/null; then
+    HOOK_DEST="$BUILD_DIR/config/hooks/live"
+else
+    HOOK_DEST="$BUILD_DIR/config/hooks"
+fi
+mkdir -p "$HOOK_DEST"
+cp "$PROJECT_DIR/kali-config/common/hooks/live/"*.hook.chroot "$HOOK_DEST/"
+chmod +x "$HOOK_DEST"/*.hook.chroot 2>/dev/null || true
+
+HOOK_SRC_COUNT=$(find "$PROJECT_DIR/kali-config/common/hooks/live" -name '*.hook.chroot' | wc -l)
+HOOK_DST_COUNT=$(find "$HOOK_DEST" -maxdepth 1 -name '*.hook.chroot' | wc -l)
+if [ "$HOOK_DST_COUNT" -ne "$HOOK_SRC_COUNT" ] || [ "$HOOK_DST_COUNT" -eq 0 ]; then
+    echo "ERROR: staged $HOOK_DST_COUNT of $HOOK_SRC_COUNT hooks into $HOOK_DEST"
+    echo "       The ISO would build without any OSI customisation. Aborting."
+    exit 1
+fi
+echo "    Installed $HOOK_DST_COUNT hooks into ${HOOK_DEST#"$BUILD_DIR"/}"
 
 # Squashfs excludes (omit build-only files from the live filesystem image)
 mkdir -p "$BUILD_DIR/config/binary_rootfs"
@@ -268,7 +299,15 @@ if [ -f "$PROJECT_DIR/kali-config/common/binary_rootfs/excludes" ]; then
 fi
 
 # Rootfs overlay (configs, skel, sysctl, etc.)
-cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/" 2>/dev/null || true
+mkdir -p "$BUILD_DIR/config/includes.chroot"
+cp -a "$PROJECT_DIR/kali-config/common/includes.chroot/"* "$BUILD_DIR/config/includes.chroot/"
+INC_SRC_COUNT=$(find "$PROJECT_DIR/kali-config/common/includes.chroot" -type f | wc -l)
+INC_DST_COUNT=$(find "$BUILD_DIR/config/includes.chroot" -type f | wc -l)
+if [ "$INC_DST_COUNT" -lt "$INC_SRC_COUNT" ]; then
+    echo "ERROR: overlay short — staged $INC_DST_COUNT of $INC_SRC_COUNT files into config/includes.chroot/"
+    exit 1
+fi
+echo "    Installed rootfs overlay ($INC_DST_COUNT files)"
 
 # ── Build (staged) ────────────────────────────────────────────────────────────
 # live-build's lb_chroot_archives generates a sources.list entry for

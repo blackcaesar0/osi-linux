@@ -17,7 +17,7 @@ xfce4-terminal
 xfce4-clipman-plugin
 xfce4-power-manager
 xfce4-whiskermenu-plugin
-xfce4-statusnotifier-plugin
+# xfce4-statusnotifier-plugin removed — merged into xfce4-panel (>= 4.20)
 xfce4-pulseaudio-plugin
 xfce4-notifyd
 lightdm
@@ -58,13 +58,13 @@ fzf
 
 # ── Network Manager ──────────────────────────────────────────────────────────
 network-manager
-network-manager-gnome
+network-manager-applet
 
 # ── QEMU/KVM guest integration (clipboard, auto-resize, performance) ────────
 spice-vdagent
 qemu-guest-agent
 xserver-xorg-video-all
-xserver-xorg-video-qxl
+# xserver-xorg-video-qxl removed — dropped from kali-rolling; this image uses virtio-gpu
 mesa-utils
 libgl1-mesa-dri
 libglx-mesa0

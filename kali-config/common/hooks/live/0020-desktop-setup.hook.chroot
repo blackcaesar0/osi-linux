@@ -44,7 +44,7 @@ gtk-enable-input-feedback-sounds=0
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle=hintslight
-gtk-xft-rgba=rgb
+gtk-xft-rgba=none
 gtk-application-prefer-dark-theme=1
 EOF
 cp /etc/skel/.config/gtk-3.0/settings.ini /etc/skel/.config/gtk-4.0/settings.ini
@@ -59,17 +59,24 @@ gtk-cursor-theme-size=24
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle="hintslight"
-gtk-xft-rgba="rgb"
+gtk-xft-rgba="none"
 EOF
 
 # ── Xresources for DPI and cursor ────────────────────────────────────────────
+# Antialiasing is GRAYSCALE (rgba=none), not subpixel/RGB, on purpose:
+#   1. OSI-Noir is strict black-and-white. Subpixel AA renders coloured
+#      (orange/blue) fringes on every glyph edge, which is literal chroma.
+#   2. This image is VM-first. Subpixel order is a property of a physical LCD;
+#      over SPICE the host rescales and recompresses the framebuffer, so
+#      subpixel hinting produces artefacts rather than sharpness.
+# Hinting stays on, so text is still crisp.
 cat > /etc/skel/.Xresources << 'EOF'
 Xft.dpi: 96
 Xft.antialias: true
 Xft.hinting: true
 Xft.hintstyle: hintslight
-Xft.rgba: rgb
-Xft.lcdfilter: lcddefault
+Xft.rgba: none
+Xft.lcdfilter: none
 Xcursor.theme: Adwaita
 Xcursor.size: 24
 EOF
@@ -84,8 +91,8 @@ cat > /etc/skel/.config/fontconfig/fonts.conf << 'EOF'
     <edit name="antialias" mode="assign"><bool>true</bool></edit>
     <edit name="hinting" mode="assign"><bool>true</bool></edit>
     <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
-    <edit name="rgba" mode="assign"><const>rgb</const></edit>
-    <edit name="lcdfilter" mode="assign"><const>lcddefault</const></edit>
+    <edit name="rgba" mode="assign"><const>none</const></edit>
+    <edit name="lcdfilter" mode="assign"><const>none</const></edit>
   </match>
   <alias>
     <family>monospace</family>
@@ -157,10 +164,36 @@ for dir in recon exploitation post-exploitation web network forensics custom wor
 done
 
 # ── Configure the live user (osi) ─────────────────────────────────────────────
-if ! id osi &>/dev/null; then
-    useradd -m -G sudo,audio,video,cdrom,plugdev,netdev,bluetooth,wireshark \
-        -s /bin/bash osi 2>/dev/null || true
+# Create the account FIRST with no supplementary groups, then add each group
+# individually.
+#
+# `useradd -G a,b,c` is all-or-nothing: if a single group in the list does not
+# exist, useradd aborts with exit 6 and creates NO user at all. The 'wireshark'
+# group is exactly such a case — wireshark-common only creates it when its
+# debconf flag enables non-root capture, which is off by default in a
+# non-interactive build. Combined with the old `|| true`, that silently left the
+# image with no 'osi' user while LightDM's autologin-user still pointed at it,
+# so the ISO booted to a greeter with no usable account.
+if ! id osi >/dev/null 2>&1; then
+    useradd -m -s /bin/bash osi
 fi
+
+for _grp in sudo audio video cdrom plugdev netdev bluetooth wireshark; do
+    if getent group "$_grp" >/dev/null 2>&1; then
+        usermod -aG "$_grp" osi
+    else
+        echo "[OSI] group '$_grp' absent — skipping (added later if a hook creates it)"
+    fi
+done
+
+# Everything below (passwords, autologin, ownership) assumes this account
+# exists. If it does not, fail the build loudly rather than shipping a
+# system nobody can log into.
+if ! id osi >/dev/null 2>&1; then
+    echo "[OSI] ERROR: failed to create the 'osi' live user" >&2
+    exit 1
+fi
+echo "[OSI] live user: $(id osi)"
 
 # Passwordless sudo for osi
 echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd

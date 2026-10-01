@@ -24,3 +24,13 @@ jobs:
 
       - name: Run all quality gates
         run: make check
+
+  packages:
+    name: Package list resolves against kali-rolling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Validate every package exists in kali-rolling
+        run: make check-packages

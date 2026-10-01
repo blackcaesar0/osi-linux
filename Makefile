@@ -9,7 +9,7 @@ SHELL_SRCS := build.sh launch-vm.sh $(wildcard scripts/*.sh) \
 ISO        ?= $(firstword $(wildcard build/*.iso))
 
 .DEFAULT_GOAL := help
-.PHONY: help lint shellcheck syntax check-theme check-repo check sync-skel build rebuild vm vm-create clean
+.PHONY: help lint shellcheck syntax check-theme check-repo check-packages check check-all sync-skel build rebuild vm vm-create clean
 
 help: ## Show this help
 	@echo "OSI Linux — available targets:"
@@ -53,11 +53,18 @@ check-repo: ## Verify hook exec bits and package-list hygiene
 	 fi; \
 	 exit $$rc
 
+check-packages: ## Resolve every package against the live kali-rolling index (needs network)
+	@bash scripts/check-packages.sh
+
 lint: syntax shellcheck ## Run bash -n and shellcheck
 
-check: lint check-theme check-repo ## Run every quality gate (use this before pushing)
+check: lint check-theme check-repo ## Fast offline gates (use this before pushing)
 	@echo
 	@echo "All checks passed."
+
+check-all: check check-packages ## Everything, including the networked package check
+	@echo
+	@echo "All checks passed (including package resolution)." 
 
 ## ── Maintenance ──────────────────────────────────────────────────────────────
 

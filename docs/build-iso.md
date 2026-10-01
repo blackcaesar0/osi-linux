@@ -83,6 +83,21 @@ overlay has been applied. A hook that writes a file unconditionally therefore
 overwrites whatever the overlay shipped at that path — prefer writing a
 fallback only when the file is absent.
 
+### Where live-build looks for hooks
+
+live-build changed the local-hook location between releases:
+
+| live-build | Local hook path |
+|---|---|
+| older (e.g. Ubuntu's 3.x) | `config/hooks/*.chroot` |
+| newer (Debian/Kali, 2021+) | `config/hooks/live/*.chroot` |
+
+`build.sh` detects which layout the installed live-build actually scans and
+stages the hooks there, then hard-fails if fewer than all of them land. This
+matters more than it looks: copying hooks into a directory live-build never
+reads means **zero** hooks run and the build still reports success — the ISO
+just silently ships with no OSI user, theme, branding or SPICE fixes.
+
 ---
 
 ## Customization
@@ -132,6 +147,7 @@ It runs three gates, all of which also run in CI:
 | `make lint` | Every shell script parses (`bash -n`) and is shellcheck-clean at warning severity |
 | `make check-theme` | Every colour in a theme file is grayscale, and `config/` matches its `/etc/skel` mirror |
 | `make check-repo` | Build hooks are executable and the package list has no duplicates |
+| `make check-packages` | Every package still exists in kali-rolling (needs network) |
 
 The theme gate exists because OSI-Noir is specified as strict black-and-white.
 A copied snippet or an upstream default can quietly reintroduce an accent
