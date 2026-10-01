@@ -59,6 +59,32 @@ for f in "${THEME_FILES[@]}"; do
     fi
 done
 
+# ── 1b. GTK3 theme must import a base sheet AND clamp its chroma ─────────────
+# GTK 3 does not merge a named theme with a built-in default: the theme's
+# gtk.css IS the whole stylesheet, so without an @import every widget loses its
+# padding and minimum size. The import pulls in Adwaita's geometry, but Adwaita
+# also hardcodes blue as literal colours that @define-color cannot reach — so
+# the import is only safe while the grayscale clamp block accompanies it.
+# Fail if one is present without the other.
+echo
+echo "==> Checking the GTK3 theme imports a base sheet and clamps its chroma"
+for f in kali-config/common/includes.chroot/usr/share/themes/OSI-Noir/gtk-3.0/gtk.css \
+         kali-config/common/includes.chroot/usr/share/themes/OSI-Noir/gtk-3.0/gtk-dark.css; do
+    if [ ! -f "$f" ]; then fail "missing GTK3 theme file: $f"; continue; fi
+
+    has_import=0; has_clamp=0
+    grep -q 'gtk-contained-dark\.css' "$f" 2>/dev/null && has_import=1
+    grep -q 'Neutralise the chroma' "$f" 2>/dev/null && has_clamp=1
+
+    if [ "$has_import" -eq 0 ]; then
+        fail "$(basename "$f") does not import a base sheet — widgets lose all padding"
+    elif [ "$has_clamp" -eq 0 ]; then
+        fail "$(basename "$f") imports Adwaita without the grayscale clamp — blue accents will ship"
+    else
+        ok "$(basename "$f") imports a base sheet and clamps its chroma"
+    fi
+done
+
 # ── 2. config/ vs /etc/skel mirror ───────────────────────────────────────────
 echo
 echo "==> Checking config/ and /etc/skel overlay are in sync"
