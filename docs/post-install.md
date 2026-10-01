@@ -107,7 +107,7 @@ sudo apt install kali-linux-everything
 sudo apt install subfinder nuclei httpx-toolkit
 
 # More exploitation
-sudo apt install covenant powersploit
+sudo apt install powersploit sliver
 
 # Wireless (for USB WiFi passthrough)
 sudo apt install wifite kismet fern-wifi-cracker

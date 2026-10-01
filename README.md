@@ -56,7 +56,7 @@ git clone https://github.com/blackcaesar0/osi-linux
 cd osi-linux
 
 # Install prerequisites
-sudo apt install git live-build simple-cdd cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts isolinux syslinux-common
 
 # Build the ISO
 sudo ./build.sh
@@ -107,7 +107,7 @@ The VM runs with:
 | CPU/RAM | 4 cores / 2 threads, 8 GB (configurable) |
 | Boot | UEFI (OVMF) |
 | Disk | virtio-scsi, writeback cache, discard |
-| Display | **virtio-gpu** + SPICE with GL acceleration |
+| Display | **virtio-gpu** + SPICE. GL/virgl is opt-in via `GL=1` (Mesa hosts only) |
 | Clipboard | SPICE vdagent (auto, bidirectional) |
 | Auto-resize | virtio-gpu + udev + xrandr (instant) |
 | Network | virtio-net, SSH forwarded on port 2222 |
@@ -121,6 +121,7 @@ The VM runs with:
 ```sh
 VM_CORES=8 VM_THREADS=2 VM_RAM=16G ./launch-vm.sh
 DISK_IMAGE=~/VM/custom.qcow2 ./launch-vm.sh
+GL=1 ./launch-vm.sh       # virgl 3D acceleration — AMD/Intel Mesa hosts only
 NO_GL=1 ./launch-vm.sh    # headless host, use: spicy -h 127.0.0.1 -p 5900
 ```
 

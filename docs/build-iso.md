@@ -21,7 +21,7 @@ The result is a standard Debian/Kali live ISO that:
 **Host:** Debian 12+, Ubuntu 22.04+, or Kali Linux.
 
 ```sh
-sudo apt install git live-build simple-cdd cdebootstrap devscripts
+sudo apt install git live-build simple-cdd cdebootstrap devscripts isolinux syslinux-common
 ```
 
 **Disk space:** ~30 GB free (build chroot + squashfs + ISO).

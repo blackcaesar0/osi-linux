@@ -167,52 +167,6 @@ for dir in recon exploitation post-exploitation web network forensics custom wor
     printf '# %s\n\nDrop tools, scripts, and notes here.\n' "$dir" > "/etc/skel/tools/$dir/README.md"
 done
 
-# ── Configure the live user (osi) ─────────────────────────────────────────────
-# Create the account FIRST with no supplementary groups, then add each group
-# individually.
-#
-# `useradd -G a,b,c` is all-or-nothing: if a single group in the list does not
-# exist, useradd aborts with exit 6 and creates NO user at all. The 'wireshark'
-# group is exactly such a case — wireshark-common only creates it when its
-# debconf flag enables non-root capture, which is off by default in a
-# non-interactive build. Combined with the old `|| true`, that silently left the
-# image with no 'osi' user while LightDM's autologin-user still pointed at it,
-# so the ISO booted to a greeter with no usable account.
-if ! id osi >/dev/null 2>&1; then
-    useradd -m -s /bin/bash osi
-fi
-
-for _grp in sudo audio video cdrom plugdev netdev bluetooth wireshark; do
-    if getent group "$_grp" >/dev/null 2>&1; then
-        usermod -aG "$_grp" osi
-    else
-        echo "[OSI] group '$_grp' absent — skipping (added later if a hook creates it)"
-    fi
-done
-
-# Everything below (passwords, autologin, ownership) assumes this account
-# exists. If it does not, fail the build loudly rather than shipping a
-# system nobody can log into.
-if ! id osi >/dev/null 2>&1; then
-    echo "[OSI] ERROR: failed to create the 'osi' live user" >&2
-    exit 1
-fi
-echo "[OSI] live user: $(id osi)"
-
-# Passwordless sudo for osi
-echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
-chmod 0440 /etc/sudoers.d/99-osi-nopasswd
-
-# Set default password (osi:osi — user must change after first sudo/login).
-# Both passwords are immediately expired via `chage -d 0`, so PAM forces a
-# password change before anything privileged runs (sudo, su, ssh login,
-# console login). Auto-login can still get to the desktop, but any sudo or
-# su attempt will block until the password is rotated.
-echo "osi:osi" | chpasswd 2>/dev/null || true
-echo "root:toor" | chpasswd 2>/dev/null || true
-chage -d 0 osi  2>/dev/null || true
-chage -d 0 root 2>/dev/null || true
-
 # ── LightDM — auto-login with XFCE in X11 mode ──────────────────────────────
 # Explicitly force X11 session type. spice-vdagent is X11-only — if LightDM
 # starts a Wayland session, spice-vdagent exits immediately ("Screen count is
@@ -262,21 +216,80 @@ active-monitor=#cursor
 EOF
 fi
 
-# ── XFCE default session ─────────────────────────────────────────────────────
-mkdir -p /etc/skel/.config/xfce4
-cat > /etc/skel/.config/xfce4/xinitrc << 'XINITRC'
+# ── Xresources at session start ──────────────────────────────────────────────
+# Deliberately NOT shipping ~/.config/xfce4/xinitrc.
+#
+# startxfce4 execs "$BASEDIR/xinitrc" (BASEDIR = ~/.config/xfce4) in preference
+# to /etc/xdg/xfce4/xinitrc, so a file there does not extend the system startup,
+# it REPLACES it. The system file does real work we silently lost: most
+# importantly it exports XDG_MENU_PREFIX=xfce-, without which
+# xfce-applications.menu is never selected and the Applications / Whisker menu
+# comes up empty.
+#
+# The system xinitrc sources /etc/xdg/xfce4/xinitrc.d/*.sh, which is the
+# supported hook point, so put our one line there and let the rest run.
+rm -f /etc/skel/.config/xfce4/xinitrc
+mkdir -p /etc/xdg/xfce4/xinitrc.d
+cat > /etc/xdg/xfce4/xinitrc.d/50-osi-xresources.sh << 'XRES'
 #!/bin/sh
-# SPICE: use /etc/xdg/autostart/spice-vdagent.desktop only (see 0015 hook).
-# Starting spice-vdagent here *and* via autostart creates two agents and breaks clipboard.
-[ -f ~/.Xresources ] && xrdb -merge ~/.Xresources
+# OSI Linux — merge the user's X resources into the session.
+# SPICE: spice-vdagent is started by /etc/xdg/autostart/spice-vdagent.desktop
+# only (see the 0015 hook). Starting it here as well creates two agents and
+# breaks the clipboard.
+[ -f "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
+XRES
+chmod +x /etc/xdg/xfce4/xinitrc.d/50-osi-xresources.sh
 
-# exec xfce4-session, NOT startxfce4.
-# startxfce4 execs "$BASEDIR/xinitrc" where BASEDIR is ~/.config/xfce4 — this
-# very file. Calling startxfce4 from here is therefore an infinite loop, and
-# since LightDM's xfce session also runs startxfce4, autologin never reaches a
-# desktop. The system file /etc/xdg/xfce4/xinitrc ends the same way we do now.
-exec xfce4-session
-XINITRC
-chmod +x /etc/skel/.config/xfce4/xinitrc
+# ── Configure the live user (osi) ─────────────────────────────────────────────
+# This runs LAST, after every write to /etc/skel above.
+# useradd copies /etc/skel once, at creation time. Creating the account earlier
+# meant each later skel write never reached the live user: the spice-vdagent
+# user-unit mask below is the costly one — without it the osi session runs two
+# vdagent instances, vdagentd drops one, and the clipboard this image exists to
+# make work stops working.
+# Create the account FIRST with no supplementary groups, then add each group
+# individually.
+#
+# `useradd -G a,b,c` is all-or-nothing: if a single group in the list does not
+# exist, useradd aborts with exit 6 and creates NO user at all. The 'wireshark'
+# group is exactly such a case — wireshark-common only creates it when its
+# debconf flag enables non-root capture, which is off by default in a
+# non-interactive build. Combined with the old `|| true`, that silently left the
+# image with no 'osi' user while LightDM's autologin-user still pointed at it,
+# so the ISO booted to a greeter with no usable account.
+if ! id osi >/dev/null 2>&1; then
+    useradd -m -s /bin/bash osi
+fi
+
+for _grp in sudo audio video cdrom plugdev netdev bluetooth wireshark; do
+    if getent group "$_grp" >/dev/null 2>&1; then
+        usermod -aG "$_grp" osi
+    else
+        echo "[OSI] group '$_grp' absent — skipping (added later if a hook creates it)"
+    fi
+done
+
+# Everything below (passwords, autologin, ownership) assumes this account
+# exists. If it does not, fail the build loudly rather than shipping a
+# system nobody can log into.
+if ! id osi >/dev/null 2>&1; then
+    echo "[OSI] ERROR: failed to create the 'osi' live user" >&2
+    exit 1
+fi
+echo "[OSI] live user: $(id osi)"
+
+# Passwordless sudo for osi
+echo "osi ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-osi-nopasswd
+chmod 0440 /etc/sudoers.d/99-osi-nopasswd
+
+# Set default password (osi:osi — user must change after first sudo/login).
+# Both passwords are immediately expired via `chage -d 0`, so PAM forces a
+# password change before anything privileged runs (sudo, su, ssh login,
+# console login). Auto-login can still get to the desktop, but any sudo or
+# su attempt will block until the password is rotated.
+echo "osi:osi" | chpasswd 2>/dev/null || true
+echo "root:toor" | chpasswd 2>/dev/null || true
+chage -d 0 osi  2>/dev/null || true
+chage -d 0 root 2>/dev/null || true
 
 echo "[OSI] Desktop configuration complete."
